@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  This AppxManifest.xml is automatically configured during the GitHub Actions workflow.
+  
+  For fork users:
+  - The PLACEHOLDER values below are replaced automatically during build
+  - To customize, set Repository Variables in GitHub Actions (see msix_packaging.yml for details)
+  - If not set, a random GUID and your GitHub username will be used
+  - Do NOT edit the PLACEHOLDER values directly in this file
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="PLACEHOLDER_IDENTITY_NAME"
+    Publisher="CN=PLACEHOLDER_PUBLISHER_CN"
+    Version="1.0.0.0" />
+
+  <Properties>
+    <DisplayName>PythonPackageDownloader</DisplayName>
+    <PublisherDisplayName>PLACEHOLDER_PUBLISHER_NAME</PublisherDisplayName>
+    <Description>PythonPackageDownloader Application</Description>
+    <Logo>Square150x150Logo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop"
+                        MinVersion="10.0.17763.0"
+                        MaxVersionTested="10.0.19041.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="fangface.PythonPackageDownloader"
+      Executable="PythonPackageDownloader\PythonPackageDownloader.exe"
+      EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="PythonPackageDownloader"
+        Description="PythonPackageDownloader Application"
+        BackgroundColor="transparent"
+        Square150x150Logo="Square150x150Logo.png"
+        Square44x44Logo="Square44x44Logo.png" />
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+
+</Package>

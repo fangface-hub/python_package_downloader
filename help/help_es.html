@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>tmp33d2o6y8</title>
+  <style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+</style>
+  <style type="text/css">:root {--step--2: 0.64rem;--step--1: 0.8rem;--step-0: 1rem;--step-1: 1.25rem;--step-2: 1.563rem;--step-3: 1.953rem;--step-4: 2.441rem;--step-5: 3.052rem;}h1 {font-size: var(--step-5);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h2 {font-size: var(--step-4);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h3 {font-size: var(--step-3);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h4 {font-size: var(--step-2);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h5 {font-size: var(--step-1);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h6 {font-size: var(--step-0);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}body {font-size: var(--step-0);font-family:"MyricaM M", "Migu 1M", "Ricty Diminished","MeiryoKe_Console", "Consolas", "Menlo", "Ubuntu Mono","DejaVu Sans Mono", "Liberation Mono",monospace;line-height: 1.6;padding: 2rem;max-width: 1280px;margin: auto;background: #f8f9fa;color: #24292e;}code {font-size: var(--step-0);font-family:"MyricaM M", "Migu 1M", "Ricty Diminished","MeiryoKe_Console", "Consolas", "Menlo", "Ubuntu Mono","DejaVu Sans Mono", "Liberation Mono",monospace;color: black;background: lightyellow;padding: 2px 4px;border-radius: 4px;}pre code {font-size: var(--step-0);font-family:"MyricaM M", "Migu 1M", "Ricty Diminished","MeiryoKe_Console", "Consolas", "Menlo", "Ubuntu Mono","DejaVu Sans Mono", "Liberation Mono",monospace;color: black;background: lightyellow;padding: 0.5rem;display: block;border-radius: 6px;overflow-x: auto;}.sourceCode {font-size: var(--step-0);font-family:"MyricaM M", "Migu 1M", "Ricty Diminished","MeiryoKe_Console", "Consolas", "Menlo", "Ubuntu Mono","DejaVu Sans Mono", "Liberation Mono",monospace;color: black;background: lightyellow;padding: 0.5rem;display: block;border-radius: 6px;overflow-x: auto;}table {font-size: var(--step-0);border-collapse: collapse;margin: 1em 0;}table th {font-size: var(--step-0);background: lightgreen;border: 1px solid #000; padding: 0.5em 1em;}table td {font-size: var(--step-0);border: 1px solid #000; padding: 0.5em 1em;}blockquote {font-size: var(--step-0);border-left: 4px solid lightgray;padding-left: 1em;color: #6c757d;margin: 1em 0;}a:link {font-size: var(--step-0);color: #0066cc; }a:visited {font-size: var(--step-0);color: #551a8b; }a:hover {font-size: var(--step-0);color: #cc0000; }a:active {font-size: var(--step-0);color: #ff6600; }ul, ol {font-size: var(--step-0);padding-left: 2em;}hr {border: none;border-top: 1px solid #dee2e6;margin: 2em 0;}</style>
+</head>
+<body>
+<h1 id="ayuda">Ayuda</h1>
+<h2 id="uso">Uso</h2>
+<ol type="1">
+<li><p>Inicie <code>PythonPackageDownloader</code></p></li>
+<li><p>Ingrese la información de descarga</p>
+<p>Los elementos de la pantalla son los siguientes:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>Elemento de pantalla</th>
+<th>Descripción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Método de descarga</td>
+<td>Obligatorio<br>Si PyPISimple y requests no están instalados, se
+usará pip forzosamente.<br>Usar pip: Descargar paquetes usando pip
+download con el pip del entorno de descarga<br>No usar pip: Descargar
+paquetes usando HTTP</td>
+</tr>
+<tr>
+<td>Seleccionar SO</td>
+<td>Seleccione Windows, Linux o macOS</td>
+</tr>
+<tr>
+<td>Versión de Python</td>
+<td>Obligatorio, selección múltiple permitida<br>Seleccione la versión
+de Python de destino</td>
+</tr>
+<tr>
+<td>Lista de paquetes</td>
+<td>Obligatorio<br>Especifique la ruta a la lista de paquetes (archivo
+de texto)<br>El formato es el mismo que <code>requirements.txt</code>
+usado en <code>pip install -r requirements.txt</code></td>
+</tr>
+<tr>
+<td>Destino de descarga</td>
+<td>Obligatorio<br>Especifique la carpeta de destino de descarga.<br>Por
+defecto es la carpeta downloads en la ubicación del script</td>
+</tr>
+<tr>
+<td>Ruta de pip</td>
+<td>Obligatorio cuando se usa pip<br>Busca pip en el entorno de descarga
+y lo muestra inicialmente</td>
+</tr>
+<tr>
+<td>Usar proxy<br>Usuario ~ Puerto</td>
+<td>Opcional<br>Ingrese si usa un proxy</td>
+</tr>
+<tr>
+<td>Incluir formato fuente</td>
+<td>Opcional<br>Si la descarga falla, intente descargar el formato
+tar.gz</td>
+</tr>
+<tr>
+<td>Descargar dependencias</td>
+<td>Verifica las dependencias de los paquetes descargados y descarga
+recursivamente<br>Tenga en cuenta que el tiempo de procesamiento puede
+aumentar según el paquete</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Presione el botón “Guardar configuración” para guardar los elementos
+ingresados</p>
+</blockquote></li>
+<li><p>Presione el botón “Iniciar descarga”</p></li>
+</ol>
+</body>
+</html>

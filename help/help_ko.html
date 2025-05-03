@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>tmprlepa6xz</title>
+  <style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+</style>
+  <style type="text/css">:root {--step--2: 0.64rem;--step--1: 0.8rem;--step-0: 1rem;--step-1: 1.25rem;--step-2: 1.563rem;--step-3: 1.953rem;--step-4: 2.441rem;--step-5: 3.052rem;}h1 {font-size: var(--step-5);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h2 {font-size: var(--step-4);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h3 {font-size: var(--step-3);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h4 {font-size: var(--step-2);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h5 {font-size: var(--step-1);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h6 {font-size: var(--step-0);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}body {font-size: var(--step-0);font-family:"MyricaM M", "Migu 1M", "Ricty Diminished","MeiryoKe_Console", "Consolas", "Menlo", "Ubuntu Mono","DejaVu Sans Mono", "Liberation Mono",monospace;line-height: 1.6;padding: 2rem;max-width: 1280px;margin: auto;background: #f8f9fa;color: #24292e;}code {font-size: var(--step-0);font-family:"MyricaM M", "Migu 1M", "Ricty Diminished","MeiryoKe_Console", "Consolas", "Menlo", "Ubuntu Mono","DejaVu Sans Mono", "Liberation Mono",monospace;color: black;background: lightyellow;padding: 2px 4px;border-radius: 4px;}pre code {font-size: var(--step-0);font-family:"MyricaM M", "Migu 1M", "Ricty Diminished","MeiryoKe_Console", "Consolas", "Menlo", "Ubuntu Mono","DejaVu Sans Mono", "Liberation Mono",monospace;color: black;background: lightyellow;padding: 0.5rem;display: block;border-radius: 6px;overflow-x: auto;}.sourceCode {font-size: var(--step-0);font-family:"MyricaM M", "Migu 1M", "Ricty Diminished","MeiryoKe_Console", "Consolas", "Menlo", "Ubuntu Mono","DejaVu Sans Mono", "Liberation Mono",monospace;color: black;background: lightyellow;padding: 0.5rem;display: block;border-radius: 6px;overflow-x: auto;}table {font-size: var(--step-0);border-collapse: collapse;margin: 1em 0;}table th {font-size: var(--step-0);background: lightgreen;border: 1px solid #000; padding: 0.5em 1em;}table td {font-size: var(--step-0);border: 1px solid #000; padding: 0.5em 1em;}blockquote {font-size: var(--step-0);border-left: 4px solid lightgray;padding-left: 1em;color: #6c757d;margin: 1em 0;}a:link {font-size: var(--step-0);color: #0066cc; }a:visited {font-size: var(--step-0);color: #551a8b; }a:hover {font-size: var(--step-0);color: #cc0000; }a:active {font-size: var(--step-0);color: #ff6600; }ul, ol {font-size: var(--step-0);padding-left: 2em;}hr {border: none;border-top: 1px solid #dee2e6;margin: 2em 0;}</style>
+</head>
+<body>
+<h1 id="도움말">도움말</h1>
+<h2 id="사용-방법">사용 방법</h2>
+<ol type="1">
+<li><p><code>PythonPackageDownloader</code> 실행</p></li>
+<li><p>다운로드 정보 입력</p>
+<p>화면 항목은 다음과 같습니다:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>화면 항목</th>
+<th>설명</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>다운로드 방법</td>
+<td>필수 항목<br>PyPISimple과 requests가 설치되지 않은 경우 강제로 pip를
+사용합니다.<br>pip 사용: 다운로드 환경의 pip를 사용하여 pip download
+실행<br>pip 사용 안 함: HTTP를 사용하여 패키지 다운로드</td>
+</tr>
+<tr>
+<td>OS 선택</td>
+<td>Windows, Linux 또는 macOS 선택</td>
+</tr>
+<tr>
+<td>Python 버전</td>
+<td>필수 항목, 다중 선택 가능<br>대상 Python 버전 선택</td>
+</tr>
+<tr>
+<td>패키지 목록</td>
+<td>필수 항목<br>패키지 목록(텍스트 파일) 경로 지정<br>형식은
+<code>pip install -r requirements.txt</code>의
+<code>requirements.txt</code>와 동일</td>
+</tr>
+<tr>
+<td>다운로드 대상</td>
+<td>필수 항목<br>다운로드 대상 폴더 지정<br>기본값은 스크립트 위치의
+downloads 폴더</td>
+</tr>
+<tr>
+<td>pip 경로</td>
+<td>pip 사용 시 필수 항목<br>다운로드 환경에서 pip를 검색하여 초기
+표시</td>
+</tr>
+<tr>
+<td>프록시 사용<br>사용자 ~ 포트</td>
+<td>선택 항목<br>프록시를 사용하는 경우 입력</td>
+</tr>
+<tr>
+<td>소스 형식 포함</td>
+<td>선택 항목<br>다운로드 실패 시 tar.gz 형식 다운로드 시도</td>
+</tr>
+<tr>
+<td>종속성 다운로드</td>
+<td>다운로드한 패키지의 종속성을 확인하고 재귀적으로
+다운로드<br>패키지에 따라 처리 시간이 길어질 수 있으므로 주의</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>“설정 저장” 버튼을 눌러 입력 항목 저장</p>
+</blockquote></li>
+<li><p>“다운로드 시작” 버튼 클릭</p></li>
+</ol>
+</body>
+</html>

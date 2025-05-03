@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>tmpt429ak2i</title>
+  <style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+
+ul.task-list[class]{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+font-size: inherit;
+width: 0.8em;
+margin: 0 0.8em 0.2em -1.6em;
+vertical-align: middle;
+}
+</style>
+  <style type="text/css">:root {--step--2: 0.64rem;--step--1: 0.8rem;--step-0: 1rem;--step-1: 1.25rem;--step-2: 1.563rem;--step-3: 1.953rem;--step-4: 2.441rem;--step-5: 3.052rem;}h1 {font-size: var(--step-5);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h2 {font-size: var(--step-4);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h3 {font-size: var(--step-3);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h4 {font-size: var(--step-2);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h5 {font-size: var(--step-1);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}h6 {font-size: var(--step-0);font-weight: 600;margin-top: 1.5em;margin-bottom: 0.75em;}body {font-size: var(--step-0);font-family:"MyricaM M", "Migu 1M", "Ricty Diminished","MeiryoKe_Console", "Consolas", "Menlo", "Ubuntu Mono","DejaVu Sans Mono", "Liberation Mono",monospace;line-height: 1.6;padding: 2rem;max-width: 1280px;margin: auto;background: #f8f9fa;color: #24292e;}code {font-size: var(--step-0);font-family:"MyricaM M", "Migu 1M", "Ricty Diminished","MeiryoKe_Console", "Consolas", "Menlo", "Ubuntu Mono","DejaVu Sans Mono", "Liberation Mono",monospace;color: black;background: lightyellow;padding: 2px 4px;border-radius: 4px;}pre code {font-size: var(--step-0);font-family:"MyricaM M", "Migu 1M", "Ricty Diminished","MeiryoKe_Console", "Consolas", "Menlo", "Ubuntu Mono","DejaVu Sans Mono", "Liberation Mono",monospace;color: black;background: lightyellow;padding: 0.5rem;display: block;border-radius: 6px;overflow-x: auto;}.sourceCode {font-size: var(--step-0);font-family:"MyricaM M", "Migu 1M", "Ricty Diminished","MeiryoKe_Console", "Consolas", "Menlo", "Ubuntu Mono","DejaVu Sans Mono", "Liberation Mono",monospace;color: black;background: lightyellow;padding: 0.5rem;display: block;border-radius: 6px;overflow-x: auto;}table {font-size: var(--step-0);border-collapse: collapse;margin: 1em 0;}table th {font-size: var(--step-0);background: lightgreen;border: 1px solid #000; padding: 0.5em 1em;}table td {font-size: var(--step-0);border: 1px solid #000; padding: 0.5em 1em;}blockquote {font-size: var(--step-0);border-left: 4px solid lightgray;padding-left: 1em;color: #6c757d;margin: 1em 0;}a:link {font-size: var(--step-0);color: #0066cc; }a:visited {font-size: var(--step-0);color: #551a8b; }a:hover {font-size: var(--step-0);color: #cc0000; }a:active {font-size: var(--step-0);color: #ff6600; }ul, ol {font-size: var(--step-0);padding-left: 2em;}hr {border: none;border-top: 1px solid #dee2e6;margin: 2em 0;}</style>
+</head>
+<body>
+<h1 id="ヘルプ">ヘルプ</h1>
+<h2 id="使用方法">使用方法</h2>
+<ol type="1">
+<li><p><code>PythonPackageDownloader</code> を起動する</p></li>
+<li><p>ダウンロード情報を入力する</p>
+<p>画面項目は以下のとおり。</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr>
+<th>画面項目</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ダウンロード方法</td>
+<td>必須項目<br>PyPISimpleとrequestsが未インストールの場合は強制的にpipを使う。<br>pipを使う：
+ダウンロード環境の pip を使って pip download する <br> pipを使わない：
+httpを使用パしてパッケージをダウンロードする</td>
+</tr>
+<tr>
+<td>OSを選択</td>
+<td>Windows,Linux,macOS を選択する</td>
+</tr>
+<tr>
+<td>Pythonバージョン</td>
+<td>必須項目,複数選択可<br>ターゲットのpythonバージョンを選択する</td>
+</tr>
+<tr>
+<td>パッケージリスト</td>
+<td>必須項目<br>パッケージリスト(テキストファイル)のパスを指定する<br>書式は
+<code>pip install -r requirements.txt</code> の
+<code>requirements.txt</code> と同じ</td>
+</tr>
+<tr>
+<td>ダウンロード先</td>
+<td>必須項目<br>ダウンロード先のフォルダを指定する。<br>スクリプト格納場所の
+downloads が初期値</td>
+</tr>
+<tr>
+<td>pipのパス</td>
+<td>pipを使う場合必須項目<br>ダウンロード環境にある pip
+を探して初期表示する</td>
+</tr>
+<tr>
+<td>プロキシを使用する<br>ユーザ～ポート</td>
+<td>任意項目<br>プロキシを使う場合、入力する</td>
+</tr>
+<tr>
+<td>ソース形式を含める</td>
+<td>任意項目<br>
+ダウンロードできなかった場合、tar.gz形式のダウンロードを試みる</td>
+</tr>
+<tr>
+<td>依存関係をダウンロード</td>
+<td>ダウンロードしたパッケージの依存関係を調べて再帰的にダウンロードする<br>パッケージに応じて所要時間が長くなるので注意</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>「設定を保存」ボタンを押すと入力項目を保存する</p>
+</blockquote></li>
+<li><p>「ダウンロード開始」ボタンを押す</p></li>
+</ol>
+</body>
+</html>

@@ -1,0 +1,96 @@
+name: Build MSIX Package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# For fork users: To customize the MSIX package identity, set Repository Variables:
+# 1. Go to Settings → Secrets and variables → Actions → Variables tab
+# 2. Add the following variables (all optional):
+#    - MSIX_PUBLISHER_CN: Your publisher certificate name (e.g., "CN=YourName" or "CN=GUID")
+#    - MSIX_IDENTITY_NAME: Your package identity name (e.g., "YourName.PythonPackageDownloader")
+#    - MSIX_PUBLISHER_NAME: Your display name (e.g., "YourName")
+# If not set, a random GUID and your GitHub username will be used automatically.
+
+jobs:
+  build-msix:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build EXE with PyInstaller
+        run: python -m PyInstaller PythonPackageDownloader.spec
+
+      - name: Configure MSIX identity
+        run: |
+          # Variables が設定されていればそれを使用、なければデフォルト値を生成
+          $publisherCN = if ($env:MSIX_PUBLISHER_CN) { $env:MSIX_PUBLISHER_CN } else { "CN=" + [guid]::NewGuid().ToString().ToUpper() }
+          $identityName = if ($env:MSIX_IDENTITY_NAME) { $env:MSIX_IDENTITY_NAME } else { "$env:GITHUB_REPOSITORY_OWNER.PythonPackageDownloader" }
+          $publisherName = if ($env:MSIX_PUBLISHER_NAME) { $env:MSIX_PUBLISHER_NAME } else { $env:GITHUB_REPOSITORY_OWNER }
+          
+          # AppxManifest.xml を更新
+          [xml]$manifest = Get-Content AppxManifest.xml
+          $manifest.Package.Identity.Publisher = $publisherCN
+          $manifest.Package.Identity.Name = $identityName
+          $manifest.Package.Properties.PublisherDisplayName = $publisherName
+          $manifest.Save("$PWD\AppxManifest.xml")
+          
+          # 証明書用にCNを環境変数に保存
+          echo "PUBLISHER_CN=$publisherCN" >> $env:GITHUB_ENV
+        env:
+          MSIX_PUBLISHER_CN: ${{ vars.MSIX_PUBLISHER_CN }}
+          MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME }}
+          MSIX_PUBLISHER_NAME: ${{ vars.MSIX_PUBLISHER_NAME }}
+
+      - name: Prepare MSIX folder structure
+        run: |
+          mkdir msix
+          Copy-Item dist\PythonPackageDownloader msix\PythonPackageDownloader -Recurse
+          Copy-Item AppxManifest.xml msix\
+          Copy-Item Square150x150Logo.png msix\
+          Copy-Item Square44x44Logo.png msix\
+
+      - name: Create MSIX package
+        run: |
+          $root = "C:\Program Files (x86)\Windows Kits\10\bin"
+          $versions = Get-ChildItem $root | Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } | Sort-Object Name -Descending
+          $latest = $versions[0].FullName
+          $makeappx = Join-Path $latest "x64\makeappx.exe"
+          & $makeappx pack /d msix /p PythonPackageDownloader.msix /o
+
+      - name: Create self-signed certificate
+        run: |
+          $cert = New-SelfSignedCertificate -Type Custom -Subject "CN=BC42F866-1485-41CB-B9BE-EE450FA32809" -KeyUsage DigitalSignature -FriendlyName "PythonPackageDownloader Certificate" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
+          $randomPassword = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 32 | % {[char]$_})
+          $password = ConvertTo-SecureString -String $randomPassword -Force -AsPlainText
+          Export-PfxCertificate -Cert $cert -FilePath PythonPackageDownloader.pfx -Password $password
+          Export-Certificate -Cert $cert -FilePath PythonPackageDownloader.cer
+          echo "CERT_PASSWORD=$randomPassword" >> $env:GITHUB_ENV
+
+      - name: Sign MSIX package
+        run: |
+          $root = "C:\Program Files (x86)\Windows Kits\10\bin"
+          $versions = Get-ChildItem $root | Where-Object { $_.Name -match '^\d+\.\d+\.\d+\.\d+$' } | Sort-Object Name -Descending
+          $latest = $versions[0].FullName
+          $signtool = Join-Path $latest "x64\signtool.exe"
+          & $signtool sign /fd SHA256 /a /f PythonPackageDownloader.pfx /p "$env:CERT_PASSWORD" PythonPackageDownloader.msix
+
+      - name: Upload MSIX
+        uses: actions/upload-artifact@v4
+        with:
+          name: msix-package
+          path: |
+            PythonPackageDownloader.msix
+            PythonPackageDownloader.cer

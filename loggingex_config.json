@@ -1,0 +1,22 @@
+{
+    "loggingex": {
+        "level": "DEBUG",
+        "enabled": true,
+        "enabled_filehandler": false
+    },
+    "signalex": {
+        "level": "DEBUG",
+        "enabled": true,
+        "enabled_filehandler": true
+    },
+    "python_package_downloader": {
+        "level": "DEBUG",
+        "enabled": true,
+        "enabled_filehandler": true
+    },
+    "python_package_utility": {
+        "level": "DEBUG",
+        "enabled": true,
+        "enabled_filehandler": true
+    }
+}

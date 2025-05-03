@@ -1,0 +1,53 @@
+name: Build macOS App, Zip and Sign with Cosign (OIDC)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-sign-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install PyInstaller
+        run: pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: python -m PyInstaller PythonPackageDownloader.spec
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign PythonPackageDownloader executable with OIDC
+        run: cosign sign-blob --yes --output-signature dist/PythonPackageDownloader/PythonPackageDownloader.sig dist/PythonPackageDownloader/PythonPackageDownloader
+
+      - name: Create ZIP from dist/PythonPackageDownloader
+        run: |
+          cd dist
+          zip -r ../PythonPackageDownloader-macos.zip PythonPackageDownloader
+
+      - name: Sign ZIP with OIDC
+        run: cosign sign-blob --yes --output-signature PythonPackageDownloader-macos.zip.sig PythonPackageDownloader-macos.zip
+
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: PythonPackageDownloader-macos-zip
+          path: PythonPackageDownloader-macos.zip
+
+      - name: Upload ZIP signature
+        uses: actions/upload-artifact@v4
+        with:
+          name: PythonPackageDownloader-macos-signature
+          path: PythonPackageDownloader-macos.zip.sig
