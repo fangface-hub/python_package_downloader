@@ -4,8 +4,19 @@ import atexit
 import json
 import os
 import sys
-from logging import (CRITICAL, DEBUG, ERROR, INFO, WARNING, FileHandler,
-                     Formatter, Handler, Logger, StreamHandler, getLogger)
+from logging import (
+    CRITICAL,
+    DEBUG,
+    ERROR,
+    INFO,
+    WARNING,
+    Formatter,
+    Handler,
+    Logger,
+    StreamHandler,
+    getLogger,
+)
+from logging.handlers import RotatingFileHandler
 
 from pathlibex import get_data_dir
 
@@ -150,8 +161,11 @@ def generate_logger(
 
     if enabled_filehandler:
         # ファイルハンドラー
-        filehandler = FileHandler(filename=generate_log_filepath(filepath),
-                                  encoding="utf-8")
+        filehandler = RotatingFileHandler(
+            filename=generate_log_filepath(filepath),
+            maxBytes=10 * 1024 * 1024,
+            backupCount=5,
+            encoding="utf-8")
         filehandler.setFormatter(fmt)
         filehandler.setLevel(log_level)
         ret.addHandler(filehandler)
