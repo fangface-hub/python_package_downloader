@@ -25,6 +25,7 @@ from i18n import (
     get_available_languages,
     get_current_language,
     get_language_name,
+    has_translation,
     set_language,
 )
 from python_package_utility import (
@@ -48,15 +49,17 @@ def get_version() -> str:
     str
         バージョン番号
     """
-    if tomllib is None:
+    pyproject_path = Path(__file__).parent / "pyproject.toml"
+    if not pyproject_path.exists():
         return "1.0.0"
 
-    pyproject_path = Path(__file__).parent / "pyproject.toml"
-    if pyproject_path.exists():
-        with open(pyproject_path, "rb") as f:
-            data = tomllib.load(f)
-            return data.get("project", {}).get("version", "1.0.0")
-    return "1.0.0"
+    if tomllib is None:
+        raise RuntimeError(
+            "tomli/tomllib が利用できません。Python 3.11未満の場合は tomli をインストールしてください。")
+
+    with open(pyproject_path, "rb") as f:
+        data = tomllib.load(f)
+        return data.get("project", {}).get("version", "1.0.0")
 
 
 # アプリケーションバージョン
@@ -120,7 +123,6 @@ def _run_download_process(
         else:
             progress_queue.put({"status": "completed"})
     except (OSError, ValueError, RuntimeError) as e:
-        print(f"{_('download_error', error=e)}", file=sys.stderr)
         progress_queue.put({"status": "error", "message": str(e)})
         sys.exit(1)
 
@@ -148,18 +150,28 @@ class MainWindow(Tk):
         self.progress_queue = None
         self.stop_event = None
         self.download_process = None
+        # 進捗状態を保持する変数
+        self.main_progress_text = ""
+        self.dependency_progress_text = ""
+        # 階層ごとの依存関係進捗を管理（level -> progress_text）
+        self.dependency_progress_stack = {}
         self.setup_menu()
         self.setup_ui()
+
+        # ウィンドウクローズ時の処理を設定
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         if settings:
             self.os_options_listbox.curselection_list = settings.get(
                 "os_list", [])
             self.python_version_listbox.curselection_list = settings.get(
                 "python_versions", [])
-            # package_list_filesをリストとして読み込み
+            # package_list_filesをリストとして読み込み（存在するファイルのみ）
             package_list_files = settings.get("package_list_files", [])
-            self.package_list_combobox["values"] = package_list_files
-            if package_list_files:
+            # 存在するファイルのみをフィルタリング
+            existing_files = [f for f in package_list_files if Path(f).exists()]
+            self.package_list_combobox["values"] = existing_files
+            if existing_files:
                 self.package_list_combobox.current(0)
             self.dest_folder_entry.value = settings.get("dest_folder", "")
             self.pip_path_entry.value = settings.get("pip_path", "")
@@ -689,9 +701,19 @@ class MainWindow(Tk):
             messagebox.showerror(_("error"), _("select_package_list_file"))
             return
 
+        # パッケージリストファイルの存在チェック
+        if not Path(package_list_file).exists():
+            messagebox.showerror(_("error"),
+                                 _("file_not_found", file=package_list_file))
+            return
+
         if not dest_folder:
             messagebox.showerror(_("error"), _("select_download_destination"))
             return
+
+        # 進捗情報用Queueと中止用Eventを作成
+        self.progress_queue = multiprocessing.Queue()
+        self.stop_event = multiprocessing.Event()
 
         # 各バージョンに対してダウンロードを実行
         config = DownloadConfig(
@@ -704,11 +726,8 @@ class MainWindow(Tk):
             proxy=proxy,
             use_pip=use_pip,
             pip_path=pip_path,
+            progress_queue=self.progress_queue,
         )
-
-        # 進捗情報用Queueと中止用Eventを作成
-        self.progress_queue = multiprocessing.Queue()
-        self.stop_event = multiprocessing.Event()
 
         # ボタンの状態を変更
         self.download_button.config(state="disabled")
@@ -723,34 +742,86 @@ class MainWindow(Tk):
         # プロセスの完了を監視
         self._monitor_download_process()
 
+    def _update_status_label(self) -> None:
+        """ステータスラベルを更新する."""
+        # 依存関係の階層ごとの進捗をまとめて表示
+        if self.dependency_progress_stack:
+            # level順に並べて表示
+            dep_texts = [
+                self.dependency_progress_stack[level]
+                for level in sorted(self.dependency_progress_stack.keys())
+                if self.dependency_progress_stack[level]  # 空文字は除外
+            ]
+            self.dependency_progress_text = " > ".join(dep_texts)
+        else:
+            self.dependency_progress_text = ""
+
+        if self.main_progress_text and self.dependency_progress_text:
+            text = (f"{self.main_progress_text} "
+                    f"[{self.dependency_progress_text}]")
+            self.status_label.config(text=text)
+        elif self.main_progress_text:
+            self.status_label.config(text=self.main_progress_text)
+        elif self.dependency_progress_text:
+            self.status_label.config(text=self.dependency_progress_text)
+
     def _monitor_download_process(self) -> None:
         """ダウンロードプロセスの完了を監視する."""
         # Queueから進捗情報を取得
         try:
             while not self.progress_queue.empty():
                 progress = self.progress_queue.get_nowait()
-
                 if "status" in progress:
                     if progress["status"] == "completed":
+                        self.main_progress_text = ""
+                        self.dependency_progress_text = ""
+                        self.dependency_progress_stack.clear()
                         self.status_label.config(text=_("download_complete"))
                     elif progress["status"] == "cancelled":
+                        self.main_progress_text = ""
+                        self.dependency_progress_text = ""
+                        self.dependency_progress_stack.clear()
                         self.status_label.config(text=_("download_cancelled"))
                     elif progress["status"] == "error":
                         error_msg = progress.get("message", _("unknown_error"))
+                        self.main_progress_text = ""
+                        self.dependency_progress_text = ""
+                        self.dependency_progress_stack.clear()
                         self.status_label.config(
                             text=_("error_occurred", error_msg=error_msg))
+                    elif progress["status"] == "downloading_dependencies":
+                        # 総数表示は不要なので空文字で上書き（または何もしない）
+                        level = progress.get("level", 0)
+                        self.dependency_progress_stack[level] = ""
+                        self._update_status_label()
+                    elif progress["status"] == "downloading_dependency":
+                        current = progress.get("current", 0)
+                        total = progress.get("total", 0)
+                        package = progress.get("package", "")
+                        level = progress.get("level", 0)
+                        self.dependency_progress_stack[
+                            level] = f"{current}/{total}>{package}"
+                        self._update_status_label()
+                    elif progress["status"] == "dependency_complete":
+                        # 指定された階層の依存関係ダウンロードが完了したら削除
+                        level = progress.get("level", 0)
+                        if level in self.dependency_progress_stack:
+                            del self.dependency_progress_stack[level]
+                        self._update_status_label()
                 elif "total" in progress and "current" in progress:
                     total = progress["total"]
                     current = progress["current"]
                     package = progress.get("package", "")
                     if package:
-                        self.status_label.config(text=_("downloading_progress",
-                                                        current=current,
-                                                        total=total,
-                                                        package=package))
+                        self.main_progress_text = _("downloading_progress",
+                                                    current=current,
+                                                    total=total,
+                                                    package=package)
                     else:
-                        self.status_label.config(text=_(
-                            "downloading_simple", current=current, total=total))
+                        self.main_progress_text = _("downloading_simple",
+                                                    current=current,
+                                                    total=total)
+                    self._update_status_label()
         except (EOFError, OSError):
             # Queue操作で発生しうる例外のみキャッチ
             pass
@@ -782,6 +853,33 @@ class MainWindow(Tk):
             self.stop_event.set()
             self.status_label.config(text=_("cancelling"))
             self.cancel_button.config(state="disabled")
+
+    def on_closing(self) -> None:
+        """ウィンドウを閉じる時の処理."""
+        # ダウンロード中の場合は確認
+        if self.download_process and self.download_process.is_alive():
+            result = messagebox.askyesno(
+                _("confirm"),
+                _("download_in_progress_close_confirm")
+                if has_translation("download_in_progress_close_confirm") else
+                "Download is in progress. Do you want to cancel and close?")
+            if not result:
+                return
+
+            # ダウンロードを中止
+            if self.stop_event:
+                self.stop_event.set()
+
+            # プロセスの終了を待つ（最大5秒）
+            if self.download_process:
+                self.download_process.join(timeout=5)
+                if self.download_process.is_alive():
+                    # まだ終了していない場合は強制終了
+                    self.download_process.terminate()
+                    self.download_process.join(timeout=2)
+
+        # ウィンドウを閉じる
+        self.destroy()
 
     def get_default_pip_path(self) -> str:
         """実行環境のpipまたはpip3のパスを検索する.

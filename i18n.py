@@ -95,6 +95,22 @@ def _(key, **kwargs):
     return text
 
 
+def has_translation(key):
+    """翻訳キーが存在するか確認する.
+
+    Parameters
+    ----------
+    key : str
+        翻訳キー
+
+    Returns
+    -------
+    bool
+        翻訳キーが存在する場合True
+    """
+    return key in _translations
+
+
 def get_available_languages():
     """利用可能な言語のリストを取得する.
 

@@ -1,6 +1,6 @@
 [project]
 name = "python-package-downloader"
-version = "1.0.1"
+version = "1.0.2"
 description = "A tool to download Python packages for offline installation"
 authors = [
     {name = "Your Name", email = "your.email@example.com"}
@@ -12,6 +12,7 @@ dependencies = [
     "requests",
     "pypi-simple",
     "cryptography",
+    "packaging",
 ]
 
 [project.optional-dependencies]

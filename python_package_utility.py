@@ -100,6 +100,8 @@ class DownloadConfig:
     )
     use_pip: bool = True  # pipを使用するかどうか
     pip_path: str = ""  # pipのパス（use_pipがTrueの場合に使用）
+    progress_queue: object = None  # 進捗情報を送信するキュー
+    dependency_level: int = 0  # 依存関係の階層レベル（0=メインパッケージ）
 
 
 @dataclass
@@ -420,29 +422,33 @@ def get_dependencies_from_whl(whl_file: str) -> list[PackageRequirements]:
         依存関係のリスト.
     """
     dependencies = []
-    with zipfile.ZipFile(whl_file, "r") as z:
-        metadata_files = [f for f in z.namelist() if "METADATA" in f]
-        if not metadata_files:
-            logger.info("%sのMETADATAファイルが見つかりません。", whl_file)
-            return dependencies
-        with z.open(metadata_files[0]) as metadata:
-            lines = metadata.read().decode().split("\n")
-            for line in lines:
-                if not line.startswith("Requires-Dist:"):
-                    continue
-                extra_match = re.match(" extra == ", line)
-                # extraのパッケージは無視する
-                if extra_match:
-                    continue
-                dep_package = re.sub(r"(Requires-Dist:)([^;]*).*$", r"\2", line)
-                requirement = parse_package_condition("".join(
-                    dep_package.split()))
-                if requirement is None:
-                    continue
-                if is_version_satisfied_in_history(
-                        requirement, package_requirements_history):
-                    continue
-                dependencies.append(requirement)
+    try:
+        with zipfile.ZipFile(whl_file, "r") as z:
+            metadata_files = [f for f in z.namelist() if "METADATA" in f]
+            if not metadata_files:
+                logger.info("%sのMETADATAファイルが見つかりません。", whl_file)
+                return dependencies
+            with z.open(metadata_files[0]) as metadata:
+                lines = metadata.read().decode().split("\n")
+                for line in lines:
+                    if not line.startswith("Requires-Dist:"):
+                        continue
+                    # extraのパッケージは無視する（正規表現をre.searchに修正）
+                    if re.search(r"extra\s*==", line):
+                        continue
+                    dep_package = re.sub(r"(Requires-Dist:)([^;]*).*$", r"\2",
+                                         line)
+                    requirement = parse_package_condition("".join(
+                        dep_package.split()))
+                    if requirement is None:
+                        continue
+                    if is_version_satisfied_in_history(
+                            requirement, package_requirements_history):
+                        continue
+                    dependencies.append(requirement)
+    except (zipfile.BadZipFile, OSError, IOError) as e:
+        logger.error("%sの依存関係取得中にエラーが発生しました: %s", whl_file, e)
+        return []
     logger.debug("whl_file=%s,dependencies=%s", whl_file, dependencies)
     return dependencies
 
@@ -461,28 +467,34 @@ def get_dependencies_from_targz(targz_file: str) -> list[PackageRequirements]:
         依存関係のリスト.
     """
     dependencies = []
-    with tarfile.open(targz_file, "r:gz") as tar:
-        pkg_info_files = [f for f in tar.getnames() if f.endswith("PKG-INFO")]
-        if not pkg_info_files:
-            print("PKG-INFO ファイルが見つかりません。")
-            return dependencies
+    try:
+        with tarfile.open(targz_file, "r:gz") as tar:
+            pkg_info_files = [
+                f for f in tar.getnames() if f.endswith("PKG-INFO")
+            ]
+            if not pkg_info_files:
+                logger.info("%sのPKG-INFOファイルが見つかりません。", targz_file)
+                return dependencies
 
-        pkg_info = tar.extractfile(pkg_info_files[0]).read().decode()
-        for line in pkg_info.split("\n"):
-            if not line.startswith("Requires-Dist:"):
-                continue
-            extra_match = re.match(" extra == ", line)
-            # extraのパッケージは無視する
-            if extra_match:
-                continue
-            dep_package = re.sub(r"(Requires-Dist:)([^;]*).*$", r"\2", line)
-            requirement = parse_package_condition("".join(dep_package.split()))
-            if requirement is None:
-                continue
-            if is_version_satisfied_in_history(requirement,
-                                               package_requirements_history):
-                continue
-            dependencies.append(requirement)
+            pkg_info = tar.extractfile(pkg_info_files[0]).read().decode()
+            for line in pkg_info.split("\n"):
+                if not line.startswith("Requires-Dist:"):
+                    continue
+                # extraのパッケージは無視する（正規表現をre.searchに修正）
+                if re.search(r"extra\s*==", line):
+                    continue
+                dep_package = re.sub(r"(Requires-Dist:)([^;]*).*$", r"\2", line)
+                requirement = parse_package_condition("".join(
+                    dep_package.split()))
+                if requirement is None:
+                    continue
+                if is_version_satisfied_in_history(
+                        requirement, package_requirements_history):
+                    continue
+                dependencies.append(requirement)
+    except (tarfile.TarError, OSError, IOError) as e:
+        logger.error("%sの依存関係取得中にエラーが発生しました: %s", targz_file, e)
+        return []
     logger.debug("targz_file=%s,dependencies=%s", targz_file, dependencies)
     return dependencies
 
@@ -760,7 +772,7 @@ def download_packages(config: DownloadConfig,
     stop_event : multiprocessing.Event, optional
         中止イベント.
     """
-    for package_requirements in package_requirements_list:
+    for i, package_requirements in enumerate(package_requirements_list, 1):
         if stop_event and stop_event.is_set():
             return
 
@@ -769,6 +781,17 @@ def download_packages(config: DownloadConfig,
             continue
         package_requirements_history.append(package_requirements)
         logger.info("%sのダウンロードを開始します...", package_requirements)
+
+        # 依存関係パッケージのダウンロード進捗を通知
+        if config.progress_queue:
+            config.progress_queue.put({
+                "status": "downloading_dependency",
+                "current": i,
+                "total": len(package_requirements_list),
+                "package": package_requirements.package_name,
+                "level": config.dependency_level
+            })
+
         if config.use_pip:
             download_package_pip(package_requirements=package_requirements,
                                  config=config,
@@ -810,9 +833,30 @@ def download_dep_package(config: DownloadConfig,
             dependencies = get_dependencies_from_whl(whl_file=file_path)
             package_requirements_list.extend(dependencies)
             continue
-    download_packages(config=config,
+
+    # 依存関係のダウンロード開始を通知
+    if package_requirements_list and config.progress_queue:
+        config.progress_queue.put({
+            "status": "downloading_dependencies",
+            "count": len(package_requirements_list),
+            "level": config.dependency_level
+        })
+
+    # 依存関係のダウンロード時に階層を進める
+    from dataclasses import replace
+    nested_config = replace(config,
+                            dependency_level=config.dependency_level + 1)
+
+    download_packages(config=nested_config,
                       package_requirements_list=package_requirements_list,
                       stop_event=stop_event)
+
+    # 依存関係のダウンロード完了を通知
+    if package_requirements_list and config.progress_queue:
+        config.progress_queue.put({
+            "status": "dependency_complete",
+            "level": config.dependency_level
+        })
 
 
 def extract_license_from_package(package_file: str, licenses_dir: str) -> None:
