@@ -174,7 +174,8 @@ class MainWindow(Tk):
             if existing_files:
                 self.package_list_combobox.current(0)
             self.dest_folder_entry.value = settings.get("dest_folder", "")
-            self.pip_path_entry.value = settings.get("pip_path", "")
+            self.pip_path_entry.value = settings.get("pip_path",
+                                                     self.pip_path_entry.value)
             self.proxy_user_entry.value = settings.get("proxy_user", "")
             self.proxy_password_entry.value = settings.get("proxy_password", "")
             self.proxy_server_entry.value = settings.get("proxy_server", "")

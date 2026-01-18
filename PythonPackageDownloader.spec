@@ -48,7 +48,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     Tree('locales', prefix='locales'),
-    Tree('help_source', prefix='help_source'),
+    Tree('help', prefix='help'),
     [('config.json', 'config.json', 'DATA'),
      ('loggingex_config.json', 'loggingex_config.json', 'DATA'),
      ('pyproject.toml', 'pyproject.toml', 'DATA'),
@@ -73,8 +73,8 @@ if os.path.exists(src_locales):
     shutil.copytree(src_locales, dst_locales)
 
 # Copy help_source directory
-src_help = os.path.join(internal_dir, 'help_source')
-dst_help = os.path.join(dist_dir, 'help_source')
+src_help = os.path.join(internal_dir, 'help')
+dst_help = os.path.join(dist_dir, 'help')
 if os.path.exists(src_help):
     if os.path.exists(dst_help):
         shutil.rmtree(dst_help)

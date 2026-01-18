@@ -80,10 +80,14 @@ def run_command(command: list[str]) -> None:
     """
     logger.info("コマンドを実行します: %s", mask_password_in_command(command))
     global subprocess_instances  # pylint: disable=global-variable-not-assigned
-    process = subprocess.Popen(command,
-                               stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE,
-                               text=True)
+    popen_kwargs = dict(stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        text=True)
+    if sys.platform == "win32":
+        # Windowsでウィンドウ非表示
+        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW",
+                                                0)
+    process = subprocess.Popen(command, **popen_kwargs)
     subprocess_instances.append(process)  # サブプロセスをリストに追加
 
     if sys.platform == "win32":

@@ -17,7 +17,7 @@
   <Identity
     Name="PLACEHOLDER_IDENTITY_NAME"
     Publisher="CN=PLACEHOLDER_PUBLISHER_CN"
-    Version="1.0.2.0" />
+    Version="1.0.3.0" />
 
   <Properties>
     <DisplayName>PythonPackageDownloader</DisplayName>

@@ -8,6 +8,8 @@
 # ファイルを指定し、ダウンロードを開始できます。
 
 # アプリケーション用モジュールをインポート
+import multiprocessing
+
 import loggingex
 import pathlibex
 from main_window import MainWindow
@@ -29,5 +31,6 @@ logger = loggingex.generate_logger(name=__name__,
                                    filepath=__file__)
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()  # 追加
     app = MainWindow()
     app.mainloop()
