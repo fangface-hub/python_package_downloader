@@ -1,15 +1,16 @@
 """Main window for Python package downloader application."""
 
 import multiprocessing
-import multiprocessing.synchronize
 import os
 import shutil
-import subprocess
 import sys
 import urllib.parse  # URLエンコード用
 from pathlib import Path
 from tkinter import END, Label, Menu, StringVar, Tk, filedialog, messagebox
 from tkinter.ttk import Button, Combobox, Frame, Radiobutton
+
+from requirements_editor import RequirementsEditor
+from subprocessex import monitor_download_process, open_file_with_platform
 
 try:
     import tomllib
@@ -69,55 +70,39 @@ VERSION = get_version()
 DATA_DIR = pathlibex.get_data_dir()
 
 
-def _run_download_process(
-        config: DownloadConfig, progress_queue: multiprocessing.Queue,
-        stop_event: multiprocessing.synchronize.Event) -> None:
-    """別プロセスでダウンロードを実行する.
-
-    Parameters
-    ----------
-    config : DownloadConfig
-        ダウンロード設定
-    progress_queue : multiprocessing.Queue
-        進捗情報を送信するキュー
-    stop_event : multiprocessing.Event
-        中止イベント
+def _run_download_process(config, progress_queue, stop_event):
+    """
+    サブプロセスでダウンロード処理を実行し、進捗をprogress_queueで報告。
+    main_window.py側はrun_with_progressで起動し、Queueから受信・表示のみ行う。
     """
     try:
-        # パッケージリストの読み込み
         with open(config.package_list_file, "r", encoding="utf-8") as file:
             package_lines = [
                 line.strip() for line in file.readlines() if line.strip()
             ]
-
         total_packages = len(package_lines)
         progress_queue.put({"total": total_packages, "current": 0})
-
         package_requirements_list = []
         for line in package_lines:
             if stop_event.is_set():
                 progress_queue.put({"status": "cancelled"})
                 return
-
             requirement = parse_package_condition("".join(line.split()))
             if requirement:
                 package_requirements_list.append(requirement)
-
-        # 各パッケージごとに進捗を更新
         for i, requirement in enumerate(package_requirements_list, 1):
             if stop_event.is_set():
                 progress_queue.put({"status": "cancelled"})
                 return
-
+            # 最上位階層の進捗も階層進捗として送信
             progress_queue.put({
-                "total": total_packages,
+                "status": "downloading_dependency",
                 "current": i,
-                "package": requirement.package_name
+                "total": total_packages,
+                "package": requirement.package_name,
+                "level": 0
             })
-
-        # 実際のダウンロード処理（stop_eventを渡す）
         start_download(config, stop_event=stop_event)
-
         if stop_event.is_set():
             progress_queue.put({"status": "cancelled"})
         else:
@@ -155,6 +140,7 @@ class MainWindow(Tk):
         self.dependency_progress_text = ""
         # 階層ごとの依存関係進捗を管理（level -> progress_text）
         self.dependency_progress_stack = {}
+
         self.setup_menu()
         self.setup_ui()
 
@@ -162,33 +148,46 @@ class MainWindow(Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         if settings:
-            self.os_options_listbox.curselection_list = settings.get(
-                "os_list", [])
-            self.python_version_listbox.curselection_list = settings.get(
-                "python_versions", [])
-            # package_list_filesをリストとして読み込み（存在するファイルのみ）
-            package_list_files = settings.get("package_list_files", [])
-            # 存在するファイルのみをフィルタリング
-            existing_files = [f for f in package_list_files if Path(f).exists()]
-            self.package_list_combobox["values"] = existing_files
-            if existing_files:
-                self.package_list_combobox.current(0)
-            self.dest_folder_entry.value = settings.get("dest_folder", "")
-            self.pip_path_entry.value = settings.get("pip_path",
-                                                     self.pip_path_entry.value)
-            self.proxy_user_entry.value = settings.get("proxy_user", "")
-            self.proxy_password_entry.value = settings.get("proxy_password", "")
-            self.proxy_server_entry.value = settings.get("proxy_server", "")
-            self.proxy_port_entry.value = settings.get("proxy_port", "")
-            self.include_source_check.value = settings.get(
-                "include_source", False)
-            self.include_deps_check.value = settings.get("incude_deps", False)
-            self.use_proxy_checkbox.value = settings.get("use_proxy", False)
-            self.toggle_proxy_widgets()
+            if hasattr(self, "os_options_listbox"):
+                self.os_options_listbox.curselection_list = settings.get(
+                    "os_list", [])
+            if hasattr(self, "python_version_listbox"):
+                self.python_version_listbox.curselection_list = settings.get(
+                    "python_versions", [])
+            if hasattr(self, "package_list_combobox"):
+                package_list_files = settings.get("package_list_files", [])
+                existing_files = [
+                    f for f in package_list_files if Path(f).exists()
+                ]
+                self.package_list_combobox["values"] = existing_files
+                if existing_files:
+                    self.package_list_combobox.current(0)
+            if hasattr(self, "dest_folder_entry"):
+                self.dest_folder_entry.value = settings.get("dest_folder", "")
+            if hasattr(self, "pip_path_entry"):
+                self.pip_path_entry.value = settings.get(
+                    "pip_path", self.pip_path_entry.value)
+            if hasattr(self, "proxy_user_entry"):
+                self.proxy_user_entry.value = settings.get("proxy_user", "")
+            if hasattr(self, "proxy_password_entry"):
+                self.proxy_password_entry.value = settings.get(
+                    "proxy_password", "")
+            if hasattr(self, "proxy_server_entry"):
+                self.proxy_server_entry.value = settings.get("proxy_server", "")
+            if hasattr(self, "proxy_port_entry"):
+                self.proxy_port_entry.value = settings.get("proxy_port", "")
+            if hasattr(self, "include_source_check"):
+                self.include_source_check.value = settings.get(
+                    "include_source", False)
+            if hasattr(self, "include_deps_check"):
+                self.include_deps_check.value = settings.get(
+                    "incude_deps", False)
+            if hasattr(self, "use_proxy_checkbox"):
+                self.use_proxy_checkbox.value = settings.get("use_proxy", False)
+                self.toggle_proxy_widgets()
         else:
-            # 初回起動時のデフォルト値設定
-            # package_list.txtが存在する場合はそのパスをリストに追加
-            if (DATA_DIR / "package_list.txt").exists():
+            if hasattr(self, "package_list_combobox") and (
+                    DATA_DIR / "package_list.txt").exists():
                 default_package_list_path = str(DATA_DIR / "package_list.txt")
                 self.package_list_combobox["values"] = [
                     default_package_list_path
@@ -249,21 +248,12 @@ class MainWindow(Tk):
         """ヘルプファイルを開く."""
         current_lang = get_current_language()
         help_file = Path(__file__).parent / "help" / f"help_{current_lang}.html"
-
-        # ヘルプファイルが存在しない場合は英語版にフォールバック
         if not help_file.exists():
             help_file = Path(__file__).parent / "help" / "help_en.html"
-
-        # ヘルプファイルが存在する場合は開く
         if help_file.exists():
             try:
-                if sys.platform == "win32":
-                    os.startfile(str(help_file))
-                elif sys.platform == "darwin":
-                    subprocess.run(["open", str(help_file)], check=False)
-                else:
-                    subprocess.run(["xdg-open", str(help_file)], check=False)
-            except (OSError, subprocess.SubprocessError) as e:
+                open_file_with_platform(str(help_file))
+            except (OSError, RuntimeError) as e:
                 messagebox.showerror(_("error"),
                                      _("error_opening_help", error=str(e)))
         else:
@@ -363,6 +353,11 @@ class MainWindow(Tk):
                                text=_("delete"),
                                command=self.delete_package_list)
         delete_button.pack(side="left", padx=2, pady=5, fill="x", expand=False)
+        edit_button = Button(package_list_frame,
+                             text=_("edit"),
+                             command=self.edit_package_list)
+        edit_button.pack(side="left", padx=2, pady=5, fill="x", expand=False)
+
         # ダウンロード先フォルダ選択
         dest_folder_frame = Frame(self)
         dest_folder_frame.pack(side="top", fill="x", padx=2, pady=2)
@@ -371,30 +366,22 @@ class MainWindow(Tk):
                                                    padx=10,
                                                    pady=5,
                                                    anchor="w")
-        self.dest_folder_entry = CustomEntry(
-            dest_folder_frame,
-            state="readonly",
-        )
+        self.dest_folder_entry = CustomEntry(dest_folder_frame)
         self.dest_folder_entry.pack(side="left",
                                     padx=10,
                                     pady=5,
                                     fill="both",
                                     expand=True)
-        # 初期値をデータディレクトリの downloads に設定
-        default_dest_folder_path = DATA_DIR / "downloads"
-        default_dest_folder_path.mkdir(parents=True, exist_ok=True)
-        default_dest_folder = str(default_dest_folder_path)
-        self.dest_folder_entry.value = default_dest_folder
         dest_folder_button = Button(dest_folder_frame,
-                                    text=_("select"),
+                                    text=_("browse"),
                                     command=self.select_dest_folder)
         dest_folder_button.pack(side="left",
-                                padx=10,
+                                padx=2,
                                 pady=5,
                                 fill="x",
                                 expand=False)
 
-        # pipパス指定
+        # pipパス選択
         pip_path_frame = Frame(self)
         pip_path_frame.pack(side="top", fill="x", padx=2, pady=2)
         Label(pip_path_frame, text=_("pip_path")).pack(side="left",
@@ -407,12 +394,11 @@ class MainWindow(Tk):
                                  pady=5,
                                  fill="both",
                                  expand=True)
-        self.pip_path_entry.value = self.get_default_pip_path()
         pip_path_button = Button(pip_path_frame,
-                                 text=_("select"),
+                                 text=_("browse"),
                                  command=self.select_pip_path)
         pip_path_button.pack(side="left",
-                             padx=10,
+                             padx=2,
                              pady=5,
                              fill="x",
                              expand=False)
@@ -420,15 +406,13 @@ class MainWindow(Tk):
         # プロキシ設定
         proxy_setting_frame = Frame(self)
         proxy_setting_frame.pack(side="top", fill="x", padx=2, pady=2)
-        use_proxy_frame = Frame(proxy_setting_frame)
-        use_proxy_frame.pack(side="top", fill="x", padx=2, pady=0)
         self.use_proxy_checkbox = CustomCheckbutton(
-            use_proxy_frame,
+            proxy_setting_frame,
             text=_("use_proxy"),
-            command=self.toggle_proxy_widgets,
-        )
+            command=self.toggle_proxy_widgets)
         self.use_proxy_checkbox.pack(side="left", padx=10, pady=2, anchor="w")
         self.use_proxy_checkbox.value = False
+
         proxy_user_frame = Frame(proxy_setting_frame)
         proxy_user_frame.pack(side="top", fill="x", padx=2, pady=0)
         Label(proxy_user_frame, text=_("proxy_username")).pack(side="left",
@@ -556,6 +540,17 @@ class MainWindow(Tk):
                                expand=True,
                                padx=5,
                                pady=2)
+
+    def edit_package_list(self):
+        """パッケージリストファイルをエディタで編集する."""
+        path = self.package_list_combobox.get()
+        if not path or not os.path.exists(path):
+            messagebox.showerror("エラー", "編集するパッケージリストファイルを選択してください。")
+            return
+        editor = RequirementsEditor(master=self,
+                                    requirements_path=path,
+                                    modal=True)
+        editor.show_modal()
 
     def toggle_proxy_widgets(self) -> None:
         """プロキシ関連のウィジェットを有効化または無効化する."""
@@ -767,86 +762,20 @@ class MainWindow(Tk):
             self.status_label.config(text=self.dependency_progress_text)
 
     def _monitor_download_process(self) -> None:
-        """ダウンロードプロセスの完了を監視する."""
-        # Queueから進捗情報を取得
-        try:
-            while not self.progress_queue.empty():
-                progress = self.progress_queue.get_nowait()
-                if "status" in progress:
-                    if progress["status"] == "completed":
-                        self.main_progress_text = ""
-                        self.dependency_progress_text = ""
-                        self.dependency_progress_stack.clear()
-                        self.status_label.config(text=_("download_complete"))
-                    elif progress["status"] == "cancelled":
-                        self.main_progress_text = ""
-                        self.dependency_progress_text = ""
-                        self.dependency_progress_stack.clear()
-                        self.status_label.config(text=_("download_cancelled"))
-                    elif progress["status"] == "error":
-                        error_msg = progress.get("message", _("unknown_error"))
-                        self.main_progress_text = ""
-                        self.dependency_progress_text = ""
-                        self.dependency_progress_stack.clear()
-                        self.status_label.config(
-                            text=_("error_occurred", error_msg=error_msg))
-                    elif progress["status"] == "downloading_dependencies":
-                        # 総数表示は不要なので空文字で上書き（または何もしない）
-                        level = progress.get("level", 0)
-                        self.dependency_progress_stack[level] = ""
-                        self._update_status_label()
-                    elif progress["status"] == "downloading_dependency":
-                        current = progress.get("current", 0)
-                        total = progress.get("total", 0)
-                        package = progress.get("package", "")
-                        level = progress.get("level", 0)
-                        self.dependency_progress_stack[
-                            level] = f"{current}/{total}>{package}"
-                        self._update_status_label()
-                    elif progress["status"] == "dependency_complete":
-                        # 指定された階層の依存関係ダウンロードが完了したら削除
-                        level = progress.get("level", 0)
-                        if level in self.dependency_progress_stack:
-                            del self.dependency_progress_stack[level]
-                        self._update_status_label()
-                elif "total" in progress and "current" in progress:
-                    total = progress["total"]
-                    current = progress["current"]
-                    package = progress.get("package", "")
-                    if package:
-                        self.main_progress_text = _("downloading_progress",
-                                                    current=current,
-                                                    total=total,
-                                                    package=package)
-                    else:
-                        self.main_progress_text = _("downloading_simple",
-                                                    current=current,
-                                                    total=total)
-                    self._update_status_label()
-        except (EOFError, OSError):
-            # Queue操作で発生しうる例外のみキャッチ
-            pass
-
-        if self.download_process.is_alive():
-            # 100ms後に再度チェック
-            self.after(100, self._monitor_download_process)
-        else:
-            # プロセス終了
-            self.download_process.join()
-
-            # ボタンの状態を復元
-            self.download_button.config(state="normal")
-            self.cancel_button.config(state="disabled")
-
-            if self.download_process.exitcode == 0:
-                # 成功
-                messagebox.showinfo(_("complete"), _("all_packages_downloaded"))
-            elif not self.stop_event.is_set():
-                # エラー（中止ではない場合）
-                messagebox.showerror(
-                    _("error"),
-                    _("download_error_exitcode",
-                      exitcode=self.download_process.exitcode))
+        """ダウンロードプロセスの完了を監視する（subprocessex.pyのmonitor_download_processを利用）."""
+        monitor_download_process(
+            self.progress_queue, self.download_process, self.stop_event,
+            self.status_label, [self.main_progress_text],
+            [self.dependency_progress_text], self.dependency_progress_stack,
+            self._update_status_label, self.download_button, self.cancel_button,
+            _("complete"), _("error"), _("download_complete"),
+            _("download_cancelled"), _("error_occurred",
+                                       error_msg="{error_msg}"),
+            _("downloading_progress",
+              current="{current}",
+              total="{total}",
+              package="{package}"),
+            _("downloading_simple", current="{current}", total="{total}"))
 
     def on_cancel(self) -> None:
         """ダウンロードを中止する."""

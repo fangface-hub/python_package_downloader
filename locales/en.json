@@ -22,6 +22,7 @@
   "download_settings": "Download Settings",
   "downloading_progress": "Downloading: {current}/{total} ({package})",
   "downloading_simple": "Downloading: {current}/{total}",
+  "edit": "Edit",
   "error": "Error",
   "error_occurred": "Error: {error_msg}",
   "error_opening_help": "An error occurred while opening the help file: {error}",

@@ -23,6 +23,7 @@
   "downloading_dependencies_info": "Descargando dependencias... ({count} paquetes)",
   "downloading_progress": "Descargando: {current}/{total} ({package})",
   "downloading_simple": "Descargando: {current}/{total}",
+  "edit": "Editar",
   "error": "Error",
   "error_occurred": "Error: {error_msg}",
   "error_opening_help": "Se produjo un error al abrir el archivo de ayuda: {error}",

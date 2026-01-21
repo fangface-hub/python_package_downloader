@@ -23,6 +23,7 @@
   "downloading_dependencies_info": "Download delle dipendenze in corso... ({count} pacchetti)",
   "downloading_progress": "Download in corso: {current}/{total} ({package})",
   "downloading_simple": "Download in corso: {current}/{total}",
+  "edit": "Modifica",
   "error": "Errore",
   "error_occurred": "Errore: {error_msg}",
   "error_opening_help": "Si è verificato un errore durante l'apertura del file di aiuto: {error}",

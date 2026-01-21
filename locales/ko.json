@@ -23,6 +23,7 @@
   "downloading_dependencies_info": "종속성 다운로드 중... ({count}개 패키지)",
   "downloading_progress": "다운로드 중: {current}/{total} ({package})",
   "downloading_simple": "다운로드 중: {current}/{total}",
+  "edit": "편집",
   "error": "오류",
   "error_occurred": "오류: {error_msg}",
   "error_opening_help": "도움말 파일을 여는 동안 오류가 발생했습니다: {error}",

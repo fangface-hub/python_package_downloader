@@ -22,6 +22,7 @@
   "download_settings": "ダウンロード設定",
   "downloading_progress": "ダウンロード中: {current}/{total} ({package})",
   "downloading_simple": "ダウンロード中: {current}/{total}",
+  "edit": "編集",
   "error": "エラー",
   "error_occurred": "エラー: {error_msg}",
   "error_opening_help": "ヘルプファイルを開く際にエラーが発生しました: {error}",

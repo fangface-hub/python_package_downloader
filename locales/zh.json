@@ -23,6 +23,7 @@
   "downloading_dependencies_info": "正在下载依赖项... ({count} 个包)",
   "downloading_progress": "下载中: {current}/{total} ({package})",
   "downloading_simple": "下载中: {current}/{total}",
+  "edit": "编辑",
   "error": "错误",
   "error_occurred": "错误: {error_msg}",
   "error_opening_help": "打开帮助文件时发生错误: {error}",
