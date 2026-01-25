@@ -162,6 +162,7 @@ class MainWindow(Tk):
                 self.package_list_combobox["values"] = existing_files
                 if existing_files:
                     self.package_list_combobox.current(0)
+                    self.edit_button.config(state="normal")
             if hasattr(self, "dest_folder_entry"):
                 self.dest_folder_entry.value = settings.get("dest_folder", "")
             if hasattr(self, "pip_path_entry"):
@@ -355,8 +356,10 @@ class MainWindow(Tk):
         delete_button.pack(side="left", padx=2, pady=5, fill="x", expand=False)
         edit_button = Button(package_list_frame,
                              text=_("edit"),
+                             state="disabled",
                              command=self.edit_package_list)
         edit_button.pack(side="left", padx=2, pady=5, fill="x", expand=False)
+        self.edit_button = edit_button
 
         # ダウンロード先フォルダ選択
         dest_folder_frame = Frame(self)
@@ -545,7 +548,7 @@ class MainWindow(Tk):
         """パッケージリストファイルをエディタで編集する."""
         path = self.package_list_combobox.get()
         if not path or not os.path.exists(path):
-            messagebox.showerror("エラー", "編集するパッケージリストファイルを選択してください。")
+            messagebox.showerror(_("error"), _("select_package_list_file"))
             return
         editor = RequirementsEditor(master=self,
                                     requirements_path=path,
@@ -599,6 +602,7 @@ class MainWindow(Tk):
                 self.package_list_combobox["values"] = current_values
             # 追加したファイルを選択
             self.package_list_combobox.set(file_path)
+            self.edit_button.config(state="normal")
 
     def delete_package_list(self) -> None:
         """選択中のパッケージリストファイルを削除する."""
@@ -621,6 +625,7 @@ class MainWindow(Tk):
                     self.package_list_combobox.current(0)
                 else:
                     self.package_list_combobox.set("")
+                    self.edit_button.config(state="disabled")
 
     def select_dest_folder(self) -> None:
         """ダウンロード先フォルダを選択する."""
