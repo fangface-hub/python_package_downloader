@@ -1,6 +1,6 @@
 # python3
 """Treeview拡張版."""
-from enum import Enum
+from enum import Enum, auto
 from tkinter import HORIZONTAL, VERTICAL, Entry, Event, Frame
 from tkinter.ttk import Combobox, Scrollbar, Treeview
 from typing import Callable, Union
@@ -9,9 +9,12 @@ from typing import Callable, Union
 class CellType(Enum):
     """セルのタイプを定義する列挙型."""
 
-    READONLY = "readonly"
-    COMBOBOX = "combobox"
-    ENTRY = "entry"
+    ENTRY = auto()
+    READONLY = auto()
+    COMBOBOX = auto()
+
+
+__all__ = ["CellType", "TreeviewEx"]
 
 
 def _colid2colindex(column_id: str) -> int:
@@ -79,15 +82,15 @@ class TreeviewEx(Treeview):  # pylint: disable=too-many-ancestors
         self.combobox.bind("<<ComboboxSelected>>", self._on_combobox_selected)
 
         # 縦方向スクロールバーを作成し、Canvasに接続
-        self.scrollbar_y = Scrollbar(self.frame,
-                                     orient=VERTICAL,
-                                     command=self._on_scroll_y)
+        self.scrollbar_y = Scrollbar(
+            self.frame, orient=VERTICAL, command=self._on_scroll_y
+        )
         self.configure(yscrollcommand=self.scrollbar_y.set)
 
         # 横方向スクロールバーを作成し、Canvasに接続
-        self.scrollbar_x = Scrollbar(self.frame,
-                                     orient=HORIZONTAL,
-                                     command=self._on_scroll_x)
+        self.scrollbar_x = Scrollbar(
+            self.frame, orient=HORIZONTAL, command=self._on_scroll_x
+        )
         self.configure(xscrollcommand=self.scrollbar_x.set)
 
         super().grid(row=0, column=0, sticky="nsew")
@@ -173,12 +176,8 @@ class TreeviewEx(Treeview):  # pylint: disable=too-many-ancestors
         None.
 
         """
-        # 既存の <Double-1> バインドを取得
-        original_handler = super().bind("<Double-1>")
-        self._original_bind_double_click = original_handler
-
-        # メンバ関数をバインド
-        super().bind("<Double-1>", self._combined_handler)
+        # 既存の <Double-1> バインドを維持して追加する
+        super().bind("<Double-1>", self._combined_handler, add="+")
 
     def _combined_handler(self, event: Event):
         """
@@ -195,13 +194,13 @@ class TreeviewEx(Treeview):  # pylint: disable=too-many-ancestors
 
         """
         self.on_double_click(event)  # 追加の振る舞い
-        if self._original_bind_double_click:
-            self._original_bind_double_click(event)  # 元の振る舞い
 
-    def bind(self,
-             sequence: str = None,
-             func: Callable = None,
-             add: bool = None) -> str:
+    def bind(
+        self,
+        sequence: str | None = None,
+        func: Callable | None = None,
+        add: bool | None = None,
+    ) -> str:
         """
         bindのオーバーライド.
 
@@ -326,7 +325,7 @@ class TreeviewEx(Treeview):  # pylint: disable=too-many-ancestors
 
         """
         cell_id_pair = self.get_clicked_cell_id_pair(event)
-        if cell_id_pair != ('', ''):
+        if cell_id_pair != ("", ""):
             self.start_edit(cell_id_pair)
 
     def get_cell_value(self, cell_id_pair: tuple) -> str:
@@ -368,7 +367,8 @@ class TreeviewEx(Treeview):  # pylint: disable=too-many-ancestors
         bbox = self.bbox(row_id, column_id)
         if not bbox:
             raise ValueError(
-                f"Cannot determine the position of the cell: {cell_id_pair}")
+                f"Cannot determine the position of the cell: {cell_id_pair}"
+            )
 
         x, y, width, height = bbox
 
@@ -376,21 +376,22 @@ class TreeviewEx(Treeview):  # pylint: disable=too-many-ancestors
         if cell_type == CellType.COMBOBOX:
             # リストを保存
             if cell_id_pair in self.combobox_cell_values:
-                self._editing_combobox_values = (
-                    self.combobox_cell_values[cell_id_pair])
+                self._editing_combobox_values = self.combobox_cell_values[
+                    cell_id_pair
+                ]
             elif row_id in self.combobox_row_values:
-                self._editing_combobox_values = (
-                    self.combobox_row_values[row_id])
+                self._editing_combobox_values = self.combobox_row_values[row_id]
             elif column_id in self.combobox_column_values:
-                self._editing_combobox_values = (
-                    self.combobox_column_values[column_id])
+                self._editing_combobox_values = self.combobox_column_values[
+                    column_id
+                ]
             else:
                 self._editing_combobox_values = []
 
             # Combobox ウィジェットを設定
             self.combobox.delete(0, "end")
             self.combobox.insert(0, cell_value)
-            self.combobox['values'] = self._editing_combobox_values
+            self.combobox["values"] = self._editing_combobox_values
 
             self.combobox.place(x=x, y=y, width=width, height=height)
             self.combobox.focus_set()
@@ -423,7 +424,8 @@ class TreeviewEx(Treeview):  # pylint: disable=too-many-ancestors
             return False  # pragma: no cover
 
         if row_id not in self.get_children() or col_index >= len(
-                self["columns"]):
+            self["columns"]
+        ):
             return False
 
         return True
@@ -468,19 +470,26 @@ class TreeviewEx(Treeview):  # pylint: disable=too-many-ancestors
         row_id, column_id = cell_id_pair
 
         # readonly のチェック
-        if (row_id in self.readonly_rows or column_id in self.readonly_columns
-                or cell_id_pair in self.readonly_cells):
+        if (
+            row_id in self.readonly_rows
+            or column_id in self.readonly_columns
+            or cell_id_pair in self.readonly_cells
+        ):
             return CellType.READONLY
 
         # combobox のチェック
-        if (row_id in self.combobox_rows or column_id in self.combobox_columns
-                or cell_id_pair in self.combobox_cells):
+        if (
+            row_id in self.combobox_rows
+            or column_id in self.combobox_columns
+            or cell_id_pair in self.combobox_cells
+        ):
             return CellType.COMBOBOX
 
         return CellType.ENTRY
 
-    def update_cell(self, cell_id_pair: tuple, widget: Union[Entry,
-                                                             Combobox]) -> None:
+    def update_cell(
+        self, cell_id_pair: tuple, widget: Union[Entry, Combobox]
+    ) -> None:
         """セルの値を更新."""
         if not self.is_valid_cell(cell_id_pair):
             raise ValueError(f"Invalid cell specified: {cell_id_pair}")
@@ -526,28 +535,27 @@ class TreeviewEx(Treeview):  # pylint: disable=too-many-ancestors
         else:
             self.readonly_rows.discard(row_id)
 
-    def set_readonly_column(self,
-                            column_id: str,
-                            readonly: bool = True) -> None:
+    def set_readonly_column(
+        self, column_id: str, readonly: bool = True
+    ) -> None:
         """列を readonly に設定."""
         if readonly:
             self.readonly_columns.add(column_id)
         else:
             self.readonly_columns.discard(column_id)
 
-    def set_readonly_cell(self,
-                          cell_id_pair: tuple,
-                          readonly: bool = True) -> None:
+    def set_readonly_cell(
+        self, cell_id_pair: tuple, readonly: bool = True
+    ) -> None:
         """セルを readonly に設定."""
         if readonly:
             self.readonly_cells.add(cell_id_pair)
         else:
             self.readonly_cells.discard(cell_id_pair)
 
-    def set_combobox_row(self,
-                         row_id: str,
-                         values: list = None,
-                         is_combobox: bool = True) -> None:
+    def set_combobox_row(
+        self, row_id: str, values: list | None = None, is_combobox: bool = True
+    ) -> None:
         """行を combobox に設定."""
         if is_combobox:
             self.combobox_rows.add(row_id)
@@ -557,10 +565,12 @@ class TreeviewEx(Treeview):  # pylint: disable=too-many-ancestors
             self.combobox_rows.discard(row_id)
             self.combobox_row_values.pop(row_id, None)
 
-    def set_combobox_column(self,
-                            column_id: str,
-                            values: list = None,
-                            is_combobox: bool = True) -> None:
+    def set_combobox_column(
+        self,
+        column_id: str,
+        values: list | None = None,
+        is_combobox: bool = True,
+    ) -> None:
         """列を combobox に設定."""
         if is_combobox:
             self.combobox_columns.add(column_id)
@@ -570,10 +580,12 @@ class TreeviewEx(Treeview):  # pylint: disable=too-many-ancestors
             self.combobox_columns.discard(column_id)
             self.combobox_column_values.pop(column_id, None)
 
-    def set_combobox_cell(self,
-                          cell_id_pair: tuple,
-                          values: list = None,
-                          is_combobox: bool = True) -> None:
+    def set_combobox_cell(
+        self,
+        cell_id_pair: tuple,
+        values: list | None = None,
+        is_combobox: bool = True,
+    ) -> None:
         """セルを combobox に設定."""
         if is_combobox:
             self.combobox_cells.add(cell_id_pair)
