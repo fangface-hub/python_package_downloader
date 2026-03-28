@@ -107,3 +107,7 @@ WindowsDefenderの誤検知を避けるため、ビルド後に自己署名す�
 ## ライセンス
 
 このプロジェクトはMITライセンスの下でライセンスしています。詳細については、LICENSEファイルをご覧ください。
+
+## Sponsor
+
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub-181717?logo=github)](https://github.com/sponsors/fangface-hub)
