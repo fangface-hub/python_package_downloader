@@ -58,7 +58,11 @@ jobs:
       - name: Extract version from pyproject.toml
         id: version
         run: |
-          VERSION=$(grep -oP 'version\s*=\s*"\K[^"]+' pyproject.toml)
+          VERSION=$(sed -nE 's/^version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/p' pyproject.toml | head -n 1)
+          if [ -z "$VERSION" ]; then
+            echo "Failed to extract version from pyproject.toml" >&2
+            exit 1
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "TAG=v$VERSION" >> $GITHUB_OUTPUT
           echo "NAME=PythonPackageDownloader v$VERSION (Linux ZIP)" >> $GITHUB_OUTPUT
