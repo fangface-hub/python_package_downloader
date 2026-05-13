@@ -5,7 +5,7 @@ on:
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 jobs:
   build-sign-macos:
@@ -54,3 +54,23 @@ jobs:
         with:
           name: PythonPackageDownloader-macos-signature
           path: PythonPackageDownloader-macos.zip.sig
+
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(grep -oP 'version\s*=\s*"\K[^"]+' pyproject.toml)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TAG=v$VERSION" >> $GITHUB_OUTPUT
+          echo "NAME=PythonPackageDownloader v$VERSION (macOS ZIP)" >> $GITHUB_OUTPUT
+
+      - name: Publish macOS Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.TAG }}
+          name: ${{ steps.version.outputs.NAME }}
+          draft: false
+          prerelease: true
+          overwrite_files: true
+          files: |
+            PythonPackageDownloader-macos.zip
+            PythonPackageDownloader-macos.zip.sig

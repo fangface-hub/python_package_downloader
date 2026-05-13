@@ -5,7 +5,7 @@ on:
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 jobs:
   build-sign-windows:
@@ -52,3 +52,27 @@ jobs:
         with:
           name: PythonPackageDownloader-windows-signature
           path: PythonPackageDownloader-windows.zip.sig
+
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          $content = Get-Content pyproject.toml -Raw
+          $match = [regex]::Match($content, 'version\s*=\s*"(\d+\.\d+\.\d+)"')
+          if ($match.Success) {
+            $version = $match.Groups[1].Value
+            echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+            echo "TAG=v$version" >> $env:GITHUB_OUTPUT
+            echo "NAME=PythonPackageDownloader v$version (Windows ZIP)" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Publish Windows Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.TAG }}
+          name: ${{ steps.version.outputs.NAME }}
+          draft: false
+          prerelease: true
+          overwrite_files: true
+          files: |
+            PythonPackageDownloader-windows.zip
+            PythonPackageDownloader-windows.zip.sig

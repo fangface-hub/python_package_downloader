@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 # For fork users: To customize the MSIX package identity, set Repository Variables:
 # 1. Go to Settings → Secrets and variables → Actions → Variables tab
@@ -95,5 +95,29 @@ jobs:
         with:
           name: msix-package
           path: |
+            PythonPackageDownloader.msix
+            PythonPackageDownloader.cer
+
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          $content = Get-Content pyproject.toml -Raw
+          $match = [regex]::Match($content, 'version\s*=\s*"(\d+\.\d+\.\d+)"')
+          if ($match.Success) {
+            $version = $match.Groups[1].Value
+            echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+            echo "TAG=v$version" >> $env:GITHUB_OUTPUT
+            echo "NAME=PythonPackageDownloader v$version (MSIX)" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Publish MSIX Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.TAG }}
+          name: ${{ steps.version.outputs.NAME }}
+          draft: false
+          prerelease: true
+          overwrite_files: true
+          files: |
             PythonPackageDownloader.msix
             PythonPackageDownloader.cer

@@ -8,7 +8,8 @@
         "3.11": "cp311",
         "3.12": "cp312",
         "3.13": "cp313",
-        "3.14": "cp314"
+        "3.14": "cp314",
+        "3.15": "cp315"
     },
     "python_version_to_pattern": {
         "3.6": "(any|none|py3|cp36)",
@@ -19,15 +20,30 @@
         "3.11": "(any|none|py3|cp311)",
         "3.12": "(any|none|py3|cp312)",
         "3.13": "(any|none|py3|cp313)",
-        "3.14": "(any|none|py3|cp314)"
+        "3.14": "(any|none|py3|cp314)",
+        "3.15": "(any|none|py3|cp315)"
     },
     "os_to_platforms": {
-        "Windows": ["win_amd64"],
-        "Linux(manylinux2010_x86_64,manylinux2014_x86_64)": [
+        "Windows(win_amd64)": ["win_amd64"],
+        "Windows(win_arm64)": ["win_arm64"],
+        "Linux(linux_x86_64,manylinux2010_x86_64,manylinux2014_x86_64)": [
+            "linux_x86_64",
             "manylinux2014_x86_64",
             "manylinux2010_x86_64"
         ],
-        "Linux(manylinux2010_x86_64)": ["manylinux2010_x86_64"],
+        "Linux(linux_x86_64,manylinux2010_x86_64)": [
+            "linux_x86_64",
+            "manylinux2010_x86_64"
+        ],
+        "Linux(Linux_aarch64,manylinux2010_aarch64,manylinux2014_aarch64)": [
+            "linux_aarch64",
+            "manylinux2014_aarch64",
+            "manylinux2010_aarch64"
+        ],
+        "Linux(linux_aarch64,manylinux2010_aarch64)": [
+            "linux_aarch64",
+            "manylinux2010_aarch64"
+        ],
         "macOS": ["macosx_10_9_x86_64"]
     }
 }
