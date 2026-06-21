@@ -6,35 +6,58 @@
 
 ```text
 python_package_downloader
-├── python_package_downloader.py  # パッケージダウンローダーのメインスクリプト
-├── requirements.txt              # 依存関係のあるPythonパッケージのリスト
-├── .gitignore                    # Gitで無視するファイルやディレクトリ
-└── README.md                     # プロジェクトのドキュメント
+├── python_package_downloader.py   # アプリのエントリポイント
+├── main_window.py                 # Tkinter GUI本体
+├── python_package_utility.py      # ダウンロード処理と依存関係解析
+├── requirements_editor.py         # パッケージリスト編集UI
+├── i18n.py                        # 多言語化処理
+├── pathlibex.py                   # パス/データディレクトリ管理
+├── loggingex.py                   # ログ設定ユーティリティ
+├── signalex.py                    # サブプロセス実行/シグナル制御
+├── subprocessex.py                # ダウンロード監視・補助関数
+├── tkinterex.py                   # カスタムTkinterウィジェット
+├── treeviewex.py                  # TreeView拡張
+├── config.json                    # Pythonバージョン/OSマッピング設定
+├── loggingex_config.json          # ログ出力設定
+├── pyproject.toml                 # プロジェクト設定
+├── nuitka.cfg                     # Nuitka設定
+├── build_nuitka.ps1               # EXEビルド
+├── build_msix.ps1                 # MSIXビルド
+├── build_and_package.ps1          # EXE/MSIXビルドと署名
+├── bump_patch.ps1                 # バージョン更新
+├── sign_code.ps1                  # 署名共通処理
+├── sign_msix.ps1                  # MSIX署名
+├── create_certificate.ps1         # 自己署名証明書作成
+├── help/                          # ヘルプHTML
+├── help_source/                   # ヘルプ原稿(Markdown)
+├── locales/                       # 多言語辞書(JSON)
+├── msix_build/                    # MSIX作業ディレクトリ
+└── README.md                      # プロジェクトのドキュメント
 ```
 
 ## インストール
 
+### 前提条件
+
+[uv](https://docs.astral.sh/uv/) をインストールしてください。
+
 ### 仮想環境のセットアップ
 
-1. 仮想環境を作成する:
+1. プロジェクトディレクトリに移動して、uv を使用して依存関係をインストール:
 
 ```powershell
-python -m venv .venv
+uv sync
 ```
 
-1. 仮想環境を有効化する:
+これにより、`.venv` 仮想環境が自動作成され、すべての依存関係がインストールされます。
+
+1. 仮想環境を有効化する (オプション):
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
 
-1. 必要な依存関係をインストールする:
-
-```powershell
-pip install -r requirements.txt
-```
-
-**注:** pipを使用してダウンロードする場合は、依存関係のインストールは不要です。
+**注:** uv を使用する場合、`pip install` 不要で、`uv sync` が自動的に仮想環境を作成・管理します。
 
 ## 使用方法
 
@@ -46,7 +69,7 @@ pip install -r requirements.txt
 
     | 画面項目 | 説明 |
     | ---- | ---- |
-    | ダウンロード方法 | 必須項目<br>PyPISimpleとrequestsが未インストールの場合は強制的にpipを使う。<br>pipを使う： ダウンロード環境の pip を使って pip download する <br> pipを使わない： PyPISimpleとrequestsを使用してパッケージをダウンロードする |
+   | ダウンロード方法 | 必須項目<br>uvを使う： `uv pip download` で取得する<br>pipを使う： pip で `pip download` する<br>pipを使わない： PyPISimpleとrequestsで取得する |
     | OSを選択 | Windows,Linux,macOS を選択する |
     | Pythonバージョン | 必須項目,複数選択可<br>ターゲットのpythonバージョンを選択する |
     | パッケージリスト | 必須項目<br>パッケージリスト(テキストファイル)のパスを指定する<br>書式は `pip install -r requirements.txt` の `requirements.txt` と同じ |
@@ -62,43 +85,95 @@ pip install -r requirements.txt
 
 ## ビルド方法
 
-### 通常のビルド
+### ビルド前提条件
 
-1. PyInstaller をインストールする（requirements.txtに含まれています）
+Nuitka でビルドするには、以下がインストールされている必要があります：
 
-1. 以下のコマンドでビルドする
+- **LLVM/Clang**: C/C++ コンパイラ（通常は Visual C++ Build Tools または LLVM をインストール）
+- **Nuitka**: Python パッケージ（`uv sync --group build` でインストール）
 
-```powershell
-pyinstaller PythonPackageDownloader.spec
-```
+### 開発用依存関係のインストール
 
-実行ファイルは `dist/PythonPackageDownloader` フォルダに生成します。
-
-### ビルドと自己署名（推奨）
-
-WindowsDefenderの誤検知を避けるため、ビルド後に自己署名することを推奨します。
-
-1. **管理者権限**でPowerShellを起動する
-
-1. `build_and_sign.ps1` を編集して、以下の設定を変更する
-   - `$certName`: 証明書の名前
-   - `$orgName`: 組織名
-   - `$pfxPassword`: 証明書のパスワード
-
-1. PowerShellスクリプトを実行する
+Nuitka とビルド関連ツールをインストール：
 
 ```powershell
-.\build_and_sign.ps1
+uv sync --group build
 ```
 
-このスクリプトは以下の処理を自動的に行います：
+### EXE/MSIX をまとめてビルドする（推奨）
 
-- PyInstallerでビルド
-- PowerShellのNew-SelfSignedCertificateで自己証明書を作成（初回のみ）
-- 実行ファイルへの署名
-- 署名の検証
+以下を実行すると、EXE と MSIX をビルドして署名まで行います。
 
-証明書は `certificates` フォルダに保存し、2回目以降は再利用します。
+```powershell
+.\build_and_package.ps1
+```
+
+オプション：
+
+```powershell
+.\build_and_package.ps1 -ExeOnly
+.\build_and_package.ps1 -MsixOnly
+```
+
+生成物：
+
+- `dist/PythonPackageDownloader.exe`
+- `dist/PythonPackageDownloader.msix`
+- `dist/PythonPackageDownloader.cer`
+
+### 個別ビルド
+
+EXE のみビルド：
+
+```powershell
+.\build_nuitka.ps1
+```
+
+MSIX のみビルド（署名は別途）：
+
+```powershell
+.\build_msix.ps1
+```
+
+### ビルドのカスタマイズ
+
+ビルド設定は以下のファイルで管理されます：
+
+- [pyproject.toml](pyproject.toml) - `[tool.nuitka]` セクション
+- [nuitka.cfg](nuitka.cfg) - Nuitka の詳細設定
+
+または、`build_nuitka.ps1` / `build_and_package.ps1` を直接編集してカスタマイズできます。
+
+## バージョン更新
+
+`bump_patch.ps1` を使うと、以下の2ファイルのバージョンを同時に更新できます。
+
+- `pyproject.toml` の `version` (`X.Y.Z`)
+- `AppxManifest.xml` の `Version` (`X.Y.Z.0`)
+
+### 使い方
+
+パッチバージョンを1つ上げる（既定動作）:
+
+```powershell
+.\bump_patch.ps1
+```
+
+メジャー/マイナーバージョンを上げる:
+
+```powershell
+.\bump_patch.ps1 -BumpType major
+.\bump_patch.ps1 -BumpType minor
+.\bump_patch.ps1 -BumpType patch
+```
+
+任意のバージョンを直接指定する:
+
+```powershell
+.\bump_patch.ps1 -SpecificVersion 1.2.3
+```
+
+`-SpecificVersion` は `X.Y.Z` 形式のみ受け付けます。
 
 ## コントリビューション
 

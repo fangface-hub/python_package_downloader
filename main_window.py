@@ -1,13 +1,26 @@
 """Main window for Python package downloader application."""
 
-import multiprocessing
+import logging
 import os
+import queue
 import shutil
 import sys
+import threading
+import traceback
 import urllib.parse  # URLエンコード用
 from pathlib import Path
-from tkinter import END, Label, Menu, StringVar, Tk, filedialog, messagebox
-from tkinter.ttk import Button, Combobox, Frame, Radiobutton
+from tkinter import (
+    END,
+    Label,
+    Menu,
+    StringVar,
+    Text,
+    Tk,
+    Toplevel,
+    filedialog,
+    messagebox,
+)
+from tkinter.ttk import Button, Combobox, Frame, Radiobutton, Scrollbar
 
 from requirements_editor import RequirementsEditor
 from subprocessex import monitor_download_process, open_file_with_platform
@@ -40,6 +53,160 @@ from python_package_utility import (
     start_download,
 )
 from tkinterex import CustomCheckbutton, CustomEntry, CustomListbox
+
+_stdout_subscribers = []
+_stdout_state = {"installed": False}
+
+
+class _StdoutTee:
+    """標準出力/標準エラーを横取りして購読者に配信する。"""
+
+    def __init__(self, original_stream):
+        self._original_stream = original_stream
+        self._line_buffer = ""
+        self._lock = threading.Lock()
+
+    def write(self, text: str) -> int:
+        """元のストリームへ書き込みつつ、行単位で購読者へ通知する。"""
+        if not text:
+            return 0
+
+        written = len(text)
+        if self._original_stream and hasattr(self._original_stream, "write"):
+            try:
+                result = self._original_stream.write(text)
+                if isinstance(result, int):
+                    written = result
+                if hasattr(self._original_stream, "flush"):
+                    self._original_stream.flush()
+            except (AttributeError, OSError, ValueError):
+                pass
+
+        with self._lock:
+            self._line_buffer += text
+            lines = self._line_buffer.split("\n")
+            self._line_buffer = lines.pop()
+
+        for line in lines:
+            _publish_stdout_line(line.rstrip("\r"))
+
+        return written
+
+    def flush(self) -> None:
+        """元のストリームをflushする。"""
+        if self._original_stream and hasattr(self._original_stream, "flush"):
+            try:
+                self._original_stream.flush()
+            except (AttributeError, OSError, ValueError):
+                pass
+
+
+def _publish_stdout_line(line: str) -> None:
+    """購読中のすべてのキューへ行を配信する。"""
+    for subscriber in list(_stdout_subscribers):
+        try:
+            subscriber.put_nowait(line)
+        except queue.Full:
+            continue
+
+
+def _subscribe_stdout(subscriber_queue) -> None:
+    """標準出力購読キューを登録する。"""
+    if subscriber_queue not in _stdout_subscribers:
+        _stdout_subscribers.append(subscriber_queue)
+
+
+def _unsubscribe_stdout(subscriber_queue) -> None:
+    """標準出力購読キューを解除する。"""
+    if subscriber_queue in _stdout_subscribers:
+        _stdout_subscribers.remove(subscriber_queue)
+
+
+def _retarget_stream_handlers(old_stream, new_stream) -> None:
+    """既存のStreamHandler出力先を差し替える。"""
+    loggers = [logging.getLogger()]
+    for logger_instance in logging.Logger.manager.loggerDict.values():
+        if isinstance(logger_instance, logging.Logger):
+            loggers.append(logger_instance)
+
+    for logger_instance in loggers:
+        for handler in logger_instance.handlers:
+            if (isinstance(handler, logging.StreamHandler)
+                    and handler.stream is old_stream):
+                handler.setStream(new_stream)
+
+
+def _install_stdout_tee() -> None:
+    """標準出力/標準エラーのteeを1回だけ有効化する。"""
+    if _stdout_state["installed"]:
+        return
+
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
+    sys.stdout = _StdoutTee(original_stdout)
+    sys.stderr = _StdoutTee(original_stderr)
+
+    _retarget_stream_handlers(original_stdout, sys.stdout)
+    _retarget_stream_handlers(original_stderr, sys.stderr)
+    _stdout_state["installed"] = True
+
+
+class LogWindow(Toplevel):
+    """標準出力をtail表示するモデルレスなログウィンドウ。"""
+
+    def __init__(self, master) -> None:
+        super().__init__(master)
+        self.title(_("menu_log_tail"))
+        self.geometry("900x360")
+
+        self._line_queue = queue.Queue()
+        _subscribe_stdout(self._line_queue)
+
+        self.protocol("WM_DELETE_WINDOW", self.on_close)
+
+        root_frame = Frame(self)
+        root_frame.pack(side="top", fill="both", expand=True, padx=4, pady=4)
+
+        self.text_widget = Text(root_frame, wrap="none")
+        self.text_widget.pack(side="left", fill="both", expand=True)
+        self.text_widget.configure(state="disabled")
+
+        y_scrollbar = Scrollbar(root_frame,
+                                orient="vertical",
+                                command=self.text_widget.yview)
+        y_scrollbar.pack(side="right", fill="y")
+        self.text_widget.configure(yscrollcommand=y_scrollbar.set)
+
+        self._append_line("=== log tail started ===")
+        self.after(100, self._poll_lines)
+
+    def _append_line(self, line: str) -> None:
+        """テキストエリアへ1行追記する。"""
+        is_bottom = self.text_widget.yview()[1] >= 0.999
+        self.text_widget.configure(state="normal")
+        self.text_widget.insert("end", f"{line}\n")
+        self.text_widget.configure(state="disabled")
+        if is_bottom:
+            self.text_widget.see("end")
+
+    def _poll_lines(self) -> None:
+        """キューからログ行を取り出して表示する。"""
+        if not self.winfo_exists():
+            return
+
+        while True:
+            try:
+                line = self._line_queue.get_nowait()
+            except queue.Empty:
+                break
+            self._append_line(line)
+
+        self.after(100, self._poll_lines)
+
+    def on_close(self) -> None:
+        """購読解除してウィンドウを閉じる。"""
+        _unsubscribe_stdout(self._line_queue)
+        self.destroy()
 
 
 def get_version() -> str:
@@ -107,9 +274,12 @@ def _run_download_process(config, progress_queue, stop_event):
             progress_queue.put({"status": "cancelled"})
         else:
             progress_queue.put({"status": "completed"})
-    except (OSError, ValueError, RuntimeError) as e:
-        progress_queue.put({"status": "error", "message": str(e)})
-        sys.exit(1)
+    except Exception as e:  # pylint: disable=broad-except
+        progress_queue.put({
+            "status": "error",
+            "message": f"{e}\n{traceback.format_exc()}"
+        })
+        return
 
 
 class MainWindow(Tk):
@@ -124,6 +294,7 @@ class MainWindow(Tk):
     def __init__(self) -> None:
         """初期化."""
         super().__init__()
+        _install_stdout_tee()
 
         # 保存された言語設定を読み込む
         settings = load_settings()
@@ -135,6 +306,7 @@ class MainWindow(Tk):
         self.progress_queue = None
         self.stop_event = None
         self.download_process = None
+        self.log_window = None
         # 進捗状態を保持する変数
         self.main_progress_text = ""
         self.dependency_progress_text = ""
@@ -148,6 +320,11 @@ class MainWindow(Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         if settings:
+            if hasattr(self, "download_method_var"):
+                saved_download_method = settings.get("download_method", "pip")
+                if saved_download_method not in ("pip", "no_pip"):
+                    saved_download_method = "pip"
+                self.download_method_var.set(saved_download_method)
             if hasattr(self, "os_options_listbox"):
                 self.os_options_listbox.curselection_list = settings.get(
                     "os_list", [])
@@ -218,6 +395,12 @@ class MainWindow(Tk):
                 label=lang_name,
                 command=lambda lc=lang_code: self.change_language(lc))
 
+        # 表示メニュー
+        view_menu = Menu(menubar, tearoff=0)
+        menubar.add_cascade(label=_("menu_view"), menu=view_menu)
+        view_menu.add_command(label=_("menu_log_tail"),
+                              command=self.show_log_window)
+
         # ヘルプメニュー
         help_menu = Menu(menubar, tearoff=0)
         menubar.add_cascade(label=_("menu_help"), menu=help_menu)
@@ -264,6 +447,15 @@ class MainWindow(Tk):
         """バージョン情報を表示する."""
         messagebox.showinfo(_("about_title"), _("about_message",
                                                 version=VERSION))
+
+    def show_log_window(self) -> None:
+        """ログtail表示ウィンドウをモデルレスで開く."""
+        if self.log_window and self.log_window.winfo_exists():
+            self.log_window.deiconify()
+            self.log_window.lift()
+            self.log_window.focus_force()
+            return
+        self.log_window = LogWindow(self)
 
     def setup_ui(self) -> None:
         """GUIの各要素を設定する."""
@@ -392,6 +584,7 @@ class MainWindow(Tk):
                                                        pady=5,
                                                        anchor="w")
         self.pip_path_entry = CustomEntry(pip_path_frame)
+        self.pip_path_entry.value = self.get_default_pip_path()
         self.pip_path_entry.pack(side="left",
                                  padx=10,
                                  pady=5,
@@ -659,7 +852,7 @@ class MainWindow(Tk):
     def on_download(self) -> None:
         """ダウンロード処理を開始する."""
         download_method = self.download_method_var.get()
-        use_pip = download_method == "pip" or not PYPISIMPLE_AVAILABLE
+        use_pip = (download_method == "pip" or not PYPISIMPLE_AVAILABLE)
         pip_path = self.pip_path_entry.get() if use_pip else ""
         os_list = self.os_options_listbox.curselection_list
         python_versions = self.python_version_listbox.curselection_list
@@ -713,8 +906,8 @@ class MainWindow(Tk):
             return
 
         # 進捗情報用Queueと中止用Eventを作成
-        self.progress_queue = multiprocessing.Queue()
-        self.stop_event = multiprocessing.Event()
+        self.progress_queue = queue.Queue()
+        self.stop_event = threading.Event()
 
         # 各バージョンに対してダウンロードを実行
         config = DownloadConfig(
@@ -726,6 +919,7 @@ class MainWindow(Tk):
             include_deps=include_deps,
             proxy=proxy,
             use_pip=use_pip,
+            use_uv=False,
             pip_path=pip_path,
             progress_queue=self.progress_queue,
         )
@@ -734,10 +928,12 @@ class MainWindow(Tk):
         self.download_button.config(state="disabled")
         self.cancel_button.config(state="normal")
 
-        # 別プロセスでダウンロードを実行
-        self.download_process = multiprocessing.Process(
-            target=_run_download_process,
-            args=(config, self.progress_queue, self.stop_event))
+        # 別スレッドでダウンロードを実行
+        self.download_process = threading.Thread(target=_run_download_process,
+                                                 args=(config,
+                                                       self.progress_queue,
+                                                       self.stop_event),
+                                                 daemon=True)
         self.download_process.start()
 
         # プロセスの完了を監視
@@ -808,10 +1004,10 @@ class MainWindow(Tk):
             # プロセスの終了を待つ（最大5秒）
             if self.download_process:
                 self.download_process.join(timeout=5)
-                if self.download_process.is_alive():
-                    # まだ終了していない場合は強制終了
-                    self.download_process.terminate()
-                    self.download_process.join(timeout=2)
+                # スレッド実行時はstop_eventで協調停止する。
+
+        if self.log_window and self.log_window.winfo_exists():
+            self.log_window.on_close()
 
         # ウィンドウを閉じる
         self.destroy()
@@ -840,6 +1036,7 @@ class MainWindow(Tk):
     def on_save_settings(self) -> None:
         """現在の設定を保存する."""
         settings = {
+            "download_method": self.download_method_var.get(),
             "os_list": self.os_options_listbox.curselection_list,
             "python_versions": self.python_version_listbox.curselection_list,
             "package_list_files": list(self.package_list_combobox["values"]),
