@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 
+from i18n import _
 from loggingex import generate_logger
 
 # グローバル変数でサブプロセスを追跡
@@ -54,9 +55,8 @@ def __signal_handler(sig, frame) -> None:  # pylint: disable=unused-argument
         なし.
 
     """
-    global subprocess_instances  # pylint: disable=global-variable-not-assigned
     if subprocess_instances:
-        logger.info("すべてのサブプロセスを終了します...")
+        logger.info(_("log_terminating_all_subprocesses"))
         while subprocess_instances:  # リストが空になるまでループ
             instance = subprocess_instances.pop(0)  # リストの先頭から取得して削除
             instance.terminate()  # サブプロセスを終了
@@ -70,23 +70,41 @@ def stream_output(pipe, log_func):
         log_func(line.strip())
 
 
-def run_command(command: list[str]) -> None:
+def _apply_windows_no_window_options(popen_kwargs: dict) -> None:
+    """Windows向けにサブプロセスのウィンドウ非表示オプションを適用する。"""
+    if sys.platform != "win32":
+        return
+
+    popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    popen_kwargs["startupinfo"] = startupinfo
+
+
+def run_command(command: list[str],
+                timeout: float | None = None,
+                stderr_as_error: bool = True) -> None:
     """コマンドの実行結果をパイプでログ出力する.
 
     Parameters
     ----------
     command : _type_
         コマンド
+    timeout : float | None, optional
+        タイムアウト秒数. Noneの場合は完了まで待機する.
+    stderr_as_error : bool, optional
+        Trueの場合は標準エラー出力をERRORとして記録する.
     """
-    logger.info("コマンドを実行します: %s", mask_password_in_command(command))
-    global subprocess_instances  # pylint: disable=global-variable-not-assigned
+    logger.info(
+        _("log_running_command",
+          command=mask_password_in_command(command)))
+    stderr_log_func = logger.error if stderr_as_error else logger.info
     popen_kwargs = dict(stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                         text=True)
-    if sys.platform == "win32":
-        # Windowsでウィンドウ非表示
-        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW",
-                                                0)
+    _apply_windows_no_window_options(popen_kwargs)
     process = subprocess.Popen(command, **popen_kwargs)
     subprocess_instances.append(process)  # サブプロセスをリストに追加
 
@@ -95,24 +113,29 @@ def run_command(command: list[str]) -> None:
         stdout_thread = threading.Thread(target=stream_output,
                                          args=(process.stdout, logger.info))
         stderr_thread = threading.Thread(target=stream_output,
-                                         args=(process.stderr, logger.error))
+                                         args=(process.stderr, stderr_log_func))
 
         stdout_thread.start()
         stderr_thread.start()
         try:
-            process.wait(timeout=10.0)
-            subprocess_instances.remove(process)  # サブプロセスをリストから削除
-        except (TimeoutError, subprocess.TimeoutExpired):
+            process.wait(timeout=timeout)
+        except (TimeoutError, subprocess.TimeoutExpired) as e:
+            process.terminate()
+            process.wait()
             logger.error("Timeout command=%s",
                          mask_password_in_command(command))
-            subprocess_instances.remove(process)  # サブプロセスをリストから削除
+            raise subprocess.TimeoutExpired(command, timeout) from e
+        finally:
+            if process in subprocess_instances:
+                subprocess_instances.remove(process)
         stdout_thread.join()
         stderr_thread.join()
     else:
         # Unix系では `select` を使用
         while True:
             reads = [process.stdout, process.stderr]
-            readable, _, _ = select.select(reads, [], [], 0.1)
+            select_result = select.select(reads, [], [], 0.1)
+            readable = select_result[0]
 
             for stream in readable:
                 line = stream.readline().strip()
@@ -120,18 +143,27 @@ def run_command(command: list[str]) -> None:
                     if stream == process.stdout:
                         logger.info(line)
                     else:
-                        logger.error(line)
+                        stderr_log_func(line)
 
             if process.poll() is not None:
                 break
         try:
-            process.wait(timeout=10.0)
-            subprocess_instances.remove(process)  # サブプロセスをリストから削除
-        except TimeoutError:
+            process.wait(timeout=timeout)
+        except (TimeoutError, subprocess.TimeoutExpired) as e:
+            process.terminate()
+            process.wait()
             logger.error("Timeout command=%s",
                          mask_password_in_command(command))
-            subprocess_instances.remove(process)  # サブプロセスをリストから削除
-        logger.info("サブプロセスを終了しました: %s", mask_password_in_command(command))
+            raise subprocess.TimeoutExpired(command, timeout) from e
+        finally:
+            if process in subprocess_instances:
+                subprocess_instances.remove(process)
+                logger.info(
+                    _("log_subprocess_terminated",
+                      command=mask_password_in_command(command)))
+
+    if process.returncode != 0:
+        raise subprocess.CalledProcessError(process.returncode, command)
 
 
 def terminate_subprocess_at_signal() -> None:
@@ -163,7 +195,10 @@ def start_subprocess(command: list) -> None:
         なし.
 
     """
-    global subprocess_instances  # pylint: disable=global-variable-not-assigned
-    process = subprocess.Popen(command)
+    popen_kwargs = {}
+    _apply_windows_no_window_options(popen_kwargs)
+    process = subprocess.Popen(command, **popen_kwargs)
     subprocess_instances.append(process)  # サブプロセスをリストに追加
-    logger.info("サブプロセスを開始しました: %s", mask_password_in_command(command))
+    logger.info(
+        _("log_subprocess_started",
+          command=mask_password_in_command(command)))

@@ -105,7 +105,8 @@ def monitor_download_process(
         download_process.join()
         download_button.config(state="normal")
         cancel_button.config(state="disabled")
-        if download_process.exitcode == 0:
+        exit_code = getattr(download_process, "exitcode", 0)
+        if exit_code == 0:
             messagebox.showinfo(complete_msg, download_complete_msg)
         elif not stop_event.is_set():
             messagebox.showerror(error_msg, error_msg)

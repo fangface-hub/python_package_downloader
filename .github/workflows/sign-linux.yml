@@ -1,4 +1,4 @@
-name: Build Linux App, Zip and Sign with Cosign (OIDC)
+name: Build Linux App with Nuitka, Zip and Sign with Cosign (OIDC)
 
 on:
   workflow_dispatch:
@@ -18,16 +18,33 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.14"
 
-      - name: Install PyInstaller
-        run: pip install pyinstaller
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm libclang-dev
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install uv
+        run: pip install uv
 
-      - name: Build with PyInstaller
-        run: python -m PyInstaller PythonPackageDownloader.spec
+      - name: Install dependencies with uv
+        run: uv sync --group build
+
+      - name: Build with Nuitka (using LLVM/Clang)
+        run: |
+          python -m uv run python -m nuitka \
+            --onefile \
+            --lto=auto \
+            --include-data-dir="help=help" \
+            --include-data-dir="locales=locales" \
+            --include-data-files="config.json=config.json" \
+            --include-data-files="loggingex_config.json=loggingex_config.json" \
+            --include-data-files="pyproject.toml=pyproject.toml" \
+            --include-data-files="Square44x44Logo.png=Square44x44Logo.png" \
+            --include-data-files="Square150x150Logo.png=Square150x150Logo.png" \
+            --output-dir="dist" \
+            python_package_downloader.py
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!--
   This AppxManifest.xml is automatically configured during the GitHub Actions workflow.
   
@@ -17,7 +17,7 @@
   <Identity
     Name="PLACEHOLDER_IDENTITY_NAME"
     Publisher="CN=PLACEHOLDER_PUBLISHER_CN"
-    Version="1.1.1.0" />
+    Version="1.2.0.0" />
 
   <Properties>
     <DisplayName>PythonPackageDownloader</DisplayName>
@@ -54,5 +54,6 @@
   </Capabilities>
 
 </Package>
+
 
 

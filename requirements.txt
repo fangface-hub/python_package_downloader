@@ -1,6 +1,0 @@
-pypi-simple
-requests
-cryptography
-packaging
-tomli
-pyinstaller

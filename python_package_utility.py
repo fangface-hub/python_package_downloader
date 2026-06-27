@@ -5,7 +5,9 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
+import sys
 import tarfile
 import zipfile
 from dataclasses import dataclass, field
@@ -15,6 +17,7 @@ from packaging.specifiers import SpecifierSet
 from packaging.version import parse
 
 import pathlibex
+from i18n import _
 from signalex import run_command
 
 try:
@@ -99,6 +102,7 @@ class DownloadConfig:
         None  # プロキシ設定（例: "http://user:password@proxyserver:port"）
     )
     use_pip: bool = True  # pipを使用するかどうか
+    use_uv: bool = False  # uvを使用するかどうか
     pip_path: str = ""  # pipのパス（use_pipがTrueの場合に使用）
     progress_queue: object = None  # 進捗情報を送信するキュー
     dependency_level: int = 0  # 依存関係の階層レベル（0=メインパッケージ）
@@ -426,7 +430,8 @@ def get_dependencies_from_whl(whl_file: str) -> list[PackageRequirements]:
         with zipfile.ZipFile(whl_file, "r") as z:
             metadata_files = [f for f in z.namelist() if "METADATA" in f]
             if not metadata_files:
-                logger.info("%sのMETADATAファイルが見つかりません。", whl_file)
+                logger.info(
+                    _("log_metadata_file_not_found", file=whl_file))
                 return dependencies
             with z.open(metadata_files[0]) as metadata:
                 lines = metadata.read().decode().split("\n")
@@ -447,7 +452,10 @@ def get_dependencies_from_whl(whl_file: str) -> list[PackageRequirements]:
                         continue
                     dependencies.append(requirement)
     except (zipfile.BadZipFile, OSError, IOError) as e:
-        logger.error("%sの依存関係取得中にエラーが発生しました: %s", whl_file, e)
+        logger.error(
+            _("log_dependency_resolution_error",
+              file=whl_file,
+              error=e))
         return []
     logger.debug("whl_file=%s,dependencies=%s", whl_file, dependencies)
     return dependencies
@@ -473,7 +481,8 @@ def get_dependencies_from_targz(targz_file: str) -> list[PackageRequirements]:
                 f for f in tar.getnames() if f.endswith("PKG-INFO")
             ]
             if not pkg_info_files:
-                logger.info("%sのPKG-INFOファイルが見つかりません。", targz_file)
+                logger.info(
+                    _("log_pkg_info_file_not_found", file=targz_file))
                 return dependencies
 
             pkg_info = tar.extractfile(pkg_info_files[0]).read().decode()
@@ -493,7 +502,10 @@ def get_dependencies_from_targz(targz_file: str) -> list[PackageRequirements]:
                     continue
                 dependencies.append(requirement)
     except (tarfile.TarError, OSError, IOError) as e:
-        logger.error("%sの依存関係取得中にエラーが発生しました: %s", targz_file, e)
+        logger.error(
+            _("log_dependency_resolution_error",
+              file=targz_file,
+              error=e))
         return []
     logger.debug("targz_file=%s,dependencies=%s", targz_file, dependencies)
     return dependencies
@@ -578,21 +590,32 @@ def download_package_pip(package_requirements: PackageRequirements,
     if stop_event and stop_event.is_set():
         return
 
-    base_command = [
-        config.pip_path,
-        "download",
-        package_requirements.requirement,
-    ]
-    if config.proxy:
-        base_command.append(f"--proxy={config.proxy}")  # プロキシ設定を追加
     before_files = set(os.listdir(config.dest_folder))
+    base_command: list[str] | None = None
     try:
+        pip_command_prefix = _resolve_pip_command_prefix(config.pip_path)
+        if not pip_command_prefix:
+            raise FileNotFoundError("利用可能なpipコマンドが見つかりません。"
+                                    "pip_pathの指定またはPython環境の設定を確認してください。")
+
+        base_command = pip_command_prefix + [
+            "download",
+            package_requirements.requirement,
+        ]
+        if config.proxy:
+            base_command.append(f"--proxy={config.proxy}")  # プロキシ設定を追加
+
         for os_name in config.os_list:
             if stop_event and stop_event.is_set():
                 return
             if stop_event and stop_event.is_set():
                 return
-            for platform in OS_TO_PLATFORMS.get(os_name):
+            platforms = OS_TO_PLATFORMS.get(os_name, [])
+            if not platforms:
+                logger.warning(
+                    _("log_skipping_unsupported_os", os_name=os_name))
+                continue
+            for platform in platforms:
                 if stop_event and stop_event.is_set():
                     return
                 for python_version in config.python_versions:
@@ -606,59 +629,364 @@ def download_package_pip(package_requirements: PackageRequirements,
                     ):
                         continue
                     tmp_version = python_version.replace(".", "")
-                    abi = PYTHON_VERSION_TO_ABI.get(python_version)
                     only_binary_command = base_command.copy()
                     only_binary_command.append("--only-binary=:all:")
                     only_binary_command.append(f"--platform={platform}")
                     only_binary_command.append(
                         f"--python-version={tmp_version}")
-                    only_binary_command.append(f"--abi={abi}")
                     only_binary_command.append(f"--dest={config.dest_folder}")
-                    run_command(only_binary_command)
+                    run_command(
+                        only_binary_command,
+                        stderr_as_error=not config.include_source,
+                    )
         after_files = set(os.listdir(config.dest_folder))
         new_files = after_files - before_files
         if 0 < len(new_files):
-            logger.info("%sが正常にダウンロードされました。", new_files)
+            logger.info(_("log_downloaded_successfully", files=new_files))
             if config.include_deps:
                 download_dep_package(config=config,
                                      filelist=new_files,
                                      stop_event=stop_event)
             return
-    except subprocess.CalledProcessError as e:
-        if config.include_source:
-            pass
-        else:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError, OSError) as e:
+        # pip自体が実行できない場合は、ソース取得へフォールバックできない。
+        if isinstance(e, (FileNotFoundError, OSError)) or base_command is None:
             logger.error(
-                "%sのダウンロード中にエラーが発生しました: %s",
-                package_requirements,
-                e,
-            )
+                _("log_download_error",
+                  requirement=package_requirements,
+                  error=e))
+            if PYPISIMPLE_AVAILABLE:
+                logger.warning(
+                    _(
+                        "pip unavailable, falling back to "
+                        "pypi-simple for {requirement}",
+                        requirement=package_requirements))
+                download_package_no_pip(
+                    package_requirements=package_requirements,
+                    config=config,
+                    stop_event=stop_event,
+                )
             return
+        if not config.include_source:
+            logger.error(
+                _("log_download_error",
+                  requirement=package_requirements,
+                  error=e))
+            return
+
     if not config.include_source:
+        logger.warning(
+            _(
+                "Could not download {requirement} with pip "
+                "(no matching wheel or pip execution failed).",
+                requirement=package_requirements))
         return
     if check_targz(folder=config.dest_folder, requirement=package_requirements):
-        logger.info("%sのソース形式はすでにダウンロード済みです。", package_requirements)
+        logger.info(
+            _("log_source_distribution_already_downloaded",
+              requirement=package_requirements))
         return
-    # ソース形式を含める場合は、--no-binaryオプションを使用して再度ダウンロード
-    no_binary_command = base_command.copy()
-    no_binary_command.append("--no-binary=:all:")
-    no_binary_command.append(f"--dest={config.dest_folder}")
+    # ソース形式は依存解決なしで取得し、ビルド依存関係解決の失敗ログを抑える。
+    no_source_command = base_command.copy()
+    no_source_command.append("--no-binary=:all:")
+    no_source_command.append("--no-deps")
+    no_source_command.append(f"--dest={config.dest_folder}")
     try:
-        run_command(no_binary_command)
-    except subprocess.CalledProcessError:
-        pass
-    no_deps_command = no_binary_command.copy()
-    no_deps_command.append("--no-deps")
-    try:
-        run_command(no_deps_command)
-    except subprocess.CalledProcessError:
+        run_command(no_source_command, stderr_as_error=False)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError, OSError):
         pass
     after_files = set(os.listdir(config.dest_folder))
     new_files = after_files - before_files
     if 0 < len(new_files):
-        logger.info("%sが正常にダウンロードされました。", new_files)
+        logger.info(_("log_downloaded_successfully", files=new_files))
         if config.include_deps:
             download_dep_package(config=config, filelist=new_files)
+
+
+def download_package_uv(package_requirements: PackageRequirements,
+                        config: DownloadConfig,
+                        stop_event=None) -> None:
+    """指定された条件でuv(pip互換)でパッケージをダウンロードする."""
+    if stop_event and stop_event.is_set():
+        return
+
+    before_files = set(os.listdir(config.dest_folder))
+    base_command: list[str] | None = None
+    try:
+        uv_command_prefix = _resolve_uv_command_prefix(config.pip_path)
+        if not uv_command_prefix:
+            raise FileNotFoundError("利用可能なuvコマンドが見つかりません。"
+                                    "uvをインストールするか、pip方式を利用してください。")
+
+        if not _supports_uv_pip_download(uv_command_prefix):
+            logger.warning(
+                _(
+                    "Current uv does not support "
+                    "uv pip download; "
+                    "falling back to pip for {requirement}",
+                    requirement=package_requirements))
+            download_package_pip(
+                package_requirements=package_requirements,
+                config=config,
+                stop_event=stop_event,
+            )
+            return
+
+        base_command = uv_command_prefix + [
+            "pip",
+            "download",
+            package_requirements.requirement,
+        ]
+        if config.proxy:
+            base_command.append(f"--proxy={config.proxy}")
+
+        for os_name in config.os_list:
+            if stop_event and stop_event.is_set():
+                return
+            platforms = OS_TO_PLATFORMS.get(os_name, [])
+            if not platforms:
+                logger.warning(
+                    _("log_skipping_unsupported_os", os_name=os_name))
+                continue
+            for platform in platforms:
+                if stop_event and stop_event.is_set():
+                    return
+                for python_version in config.python_versions:
+                    if stop_event and stop_event.is_set():
+                        return
+                    if check_whl_version(
+                            folder=config.dest_folder,
+                            requirement=package_requirements,
+                            platform=platform,
+                            python_version=python_version,
+                    ):
+                        continue
+                    tmp_version = python_version.replace(".", "")
+                    only_binary_command = base_command.copy()
+                    only_binary_command.append("--only-binary=:all:")
+                    only_binary_command.append(f"--platform={platform}")
+                    only_binary_command.append(
+                        f"--python-version={tmp_version}")
+                    only_binary_command.append(f"--dest={config.dest_folder}")
+                    run_command(
+                        only_binary_command,
+                        stderr_as_error=not config.include_source,
+                    )
+        after_files = set(os.listdir(config.dest_folder))
+        new_files = after_files - before_files
+        if 0 < len(new_files):
+            logger.info(_("log_downloaded_successfully", files=new_files))
+            if config.include_deps:
+                download_dep_package(config=config,
+                                     filelist=new_files,
+                                     stop_event=stop_event)
+            return
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError, OSError) as e:
+        if isinstance(e, (FileNotFoundError, OSError)) or base_command is None:
+            logger.error(
+                _("log_download_error",
+                  requirement=package_requirements,
+                  error=e))
+            if PYPISIMPLE_AVAILABLE:
+                logger.warning(
+                    _(
+                        "uv unavailable, falling back to "
+                        "pypi-simple for {requirement}",
+                        requirement=package_requirements))
+                download_package_no_pip(
+                    package_requirements=package_requirements,
+                    config=config,
+                    stop_event=stop_event,
+                )
+            return
+        if not config.include_source:
+            logger.error(
+                _("log_download_error",
+                  requirement=package_requirements,
+                  error=e))
+            return
+
+    if not config.include_source:
+        logger.warning(
+            _(
+                "Could not download {requirement} with uv "
+                "(no matching wheel or uv execution failed).",
+                requirement=package_requirements))
+        return
+    if check_targz(folder=config.dest_folder, requirement=package_requirements):
+        logger.info(
+            _("log_source_distribution_already_downloaded",
+              requirement=package_requirements))
+        return
+
+    no_source_command = base_command.copy()
+    no_source_command.append("--no-binary=:all:")
+    no_source_command.append("--no-deps")
+    no_source_command.append(f"--dest={config.dest_folder}")
+    try:
+        run_command(no_source_command, stderr_as_error=False)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            FileNotFoundError, OSError):
+        pass
+    after_files = set(os.listdir(config.dest_folder))
+    new_files = after_files - before_files
+    if 0 < len(new_files):
+        logger.info(_("log_downloaded_successfully", files=new_files))
+        if config.include_deps:
+            download_dep_package(config=config, filelist=new_files)
+
+
+def _resolve_pip_command_prefix(configured_pip_path: str) -> list[str] | None:
+    """利用可能なpip実行コマンドを解決する。"""
+    candidates: list[list[str]] = []
+    configured = configured_pip_path.strip() if configured_pip_path else ""
+    if configured:
+        candidates.append([configured])
+
+        configured_path = Path(configured.strip('"'))
+        configured_name = configured_path.name.lower()
+        if configured_name.startswith("python"):
+            candidates.append([str(configured_path), "-m", "pip"])
+        elif configured_name.startswith("pip"):
+            # 例: .../Scripts/pip.exe が指定された場合、
+            # 対応する python.exe -m pip も候補に追加する。
+            inferred_candidates = [
+                configured_path.parent / "python.exe",
+                configured_path.parent.parent / "python.exe",
+            ]
+            for inferred_python in inferred_candidates:
+                if inferred_python.exists():
+                    candidates.append([str(inferred_python), "-m", "pip"])
+
+    # 開発実行時は現在のPython環境を最優先にする。
+    if not getattr(sys, "frozen", False):
+        candidates.append([sys.executable, "-m", "pip"])
+
+    py_path = shutil.which("py")
+    if py_path:
+        candidates.append([py_path, "-m", "pip"])
+
+    python_path = shutil.which("python")
+    if python_path:
+        candidates.append([python_path, "-m", "pip"])
+
+    pip_path = shutil.which("pip")
+    if pip_path:
+        candidates.append([pip_path])
+
+    pip3_path = shutil.which("pip3")
+    if pip3_path:
+        candidates.append([pip3_path])
+
+    for candidate in candidates:
+        if _is_working_command(candidate):
+            return candidate
+
+    return None
+
+
+def _resolve_uv_command_prefix(configured_uv_path: str) -> list[str] | None:
+    """利用可能なuv実行コマンドを解決する。"""
+    candidates: list[list[str]] = []
+    configured = configured_uv_path.strip() if configured_uv_path else ""
+    if configured:
+        configured_path = Path(configured.strip('"'))
+        configured_name = configured_path.name.lower()
+        if configured_name.startswith("uv"):
+            candidates.append([str(configured_path)])
+        elif configured_name.startswith("python"):
+            candidates.append([str(configured_path), "-m", "uv"])
+        elif configured_name.startswith("pip"):
+            # 設定にpip実行ファイルが指定されている場合は、
+            # 同じ環境のuv/python -m uvを候補として推測する。
+            inferred_uv_candidates = [
+                configured_path.parent / "uv.exe",
+                configured_path.parent / "uv",
+                configured_path.parent.parent / "uv.exe",
+                configured_path.parent.parent / "uv",
+            ]
+            for inferred_uv in inferred_uv_candidates:
+                if inferred_uv.exists():
+                    candidates.append([str(inferred_uv)])
+
+            inferred_python_candidates = [
+                configured_path.parent / "python.exe",
+                configured_path.parent.parent / "python.exe",
+                configured_path.parent / "python",
+                configured_path.parent.parent / "python",
+            ]
+            for inferred_python in inferred_python_candidates:
+                if inferred_python.exists():
+                    candidates.append([str(inferred_python), "-m", "uv"])
+
+    if not getattr(sys, "frozen", False):
+        candidates.append([sys.executable, "-m", "uv"])
+
+    uv_path = shutil.which("uv")
+    if uv_path:
+        candidates.append([uv_path])
+
+    for candidate in candidates:
+        if _is_working_command(candidate):
+            return candidate
+
+    return None
+
+
+def _supports_uv_pip_download(uv_command_prefix: list[str]) -> bool:
+    """uvが`uv pip download`サブコマンドをサポートしているか判定する。"""
+    try:
+        probe = uv_command_prefix + ["pip", "download", "--help"]
+        result = _run_subprocess_no_window(
+            probe,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _is_working_command(command_prefix: list[str]) -> bool:
+    """コマンドが実行可能かを判定する。"""
+    try:
+        probe = command_prefix + ["--version"]
+        result = _run_subprocess_no_window(
+            probe,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _run_subprocess_no_window(command: list[str],
+                              **kwargs) -> subprocess.CompletedProcess:
+    """Windowsではコンソールウィンドウを表示せずにsubprocess.runを実行する。"""
+    if sys.platform == "win32":
+        creationflags = kwargs.pop("creationflags", 0)
+        kwargs["creationflags"] = (creationflags
+                                   | getattr(subprocess, "CREATE_NO_WINDOW", 0))
+
+        startupinfo = kwargs.pop("startupinfo", None)
+        if startupinfo is None:
+            startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        kwargs["startupinfo"] = startupinfo
+
+    check = kwargs.pop("check", False)
+    return subprocess.run(command, check=check, **kwargs)
 
 
 def download_package_no_pip(package_requirements: PackageRequirements,
@@ -678,13 +1006,17 @@ def download_package_no_pip(package_requirements: PackageRequirements,
     if stop_event and stop_event.is_set():
         return
 
-    logger.info("%sのダウンロードを開始します...", package_requirements.package_name)
+    logger.info(
+        _("log_starting_download_for_package",
+          package=package_requirements.package_name))
     before_files = set(os.listdir(config.dest_folder))
     try:
         pypi = PyPISimple()
         packages_info = pypi.get_project_page(package_requirements.package_name)
         if not packages_info:
-            logger.warning("%sの情報が見つかりませんでした。", package_requirements)
+            logger.warning(
+                _("log_package_information_not_found",
+                  requirement=package_requirements))
             return
 
         dlcnt = 0
@@ -718,9 +1050,11 @@ def download_package_no_pip(package_requirements: PackageRequirements,
             if check_targz(folder=config.dest_folder,
                            requirement=package_requirements):
                 logger.info(
-                    "%sのソース形式はすでにダウンロード済みです。",
-                    package_requirements,
-                )
+                    _(
+                        "Source distribution is already downloaded for "
+                        "{requirement}.",
+                        requirement=package_requirements,
+                    ))
                 return
             for package in reversed(packages_info.packages):
                 # ソース形式を含める場合は、再度ダウンロード
@@ -743,19 +1077,20 @@ def download_package_no_pip(package_requirements: PackageRequirements,
         after_files = set(os.listdir(config.dest_folder))
         new_files = after_files - before_files
         if 0 < len(new_files) and 0 < dlcnt:
-            logger.info("%sのダウンロードが完了しました。", new_files)
+            logger.info(_("log_download_completed", files=new_files))
             if config.include_deps:
                 download_dep_package(config=config,
                                      filelist=new_files,
                                      stop_event=stop_event)
             return
-        logger.warning("%sのダウンロードURLが見つかりませんでした。", package_requirements)
+        logger.warning(
+            _("log_download_url_not_found",
+              requirement=package_requirements))
     except requests.exceptions.RequestException as e:
         logger.error(
-            "%sのダウンロード中にエラーが発生しました: %s",
-            package_requirements,
-            e,
-        )
+            _("log_download_error",
+              requirement=package_requirements,
+              error=e))
 
 
 def download_packages(config: DownloadConfig,
@@ -780,7 +1115,8 @@ def download_packages(config: DownloadConfig,
                                            package_requirements_history):
             continue
         package_requirements_history.append(package_requirements)
-        logger.info("%sのダウンロードを開始します...", package_requirements)
+        logger.info(
+            _("log_starting_download_for_package", package=package_requirements))
 
         # 依存関係パッケージのダウンロード進捗を通知
         if config.progress_queue:
@@ -792,6 +1128,11 @@ def download_packages(config: DownloadConfig,
                 "level": config.dependency_level
             })
 
+        if config.use_uv:
+            download_package_uv(package_requirements=package_requirements,
+                                config=config,
+                                stop_event=stop_event)
+            continue
         if config.use_pip:
             download_package_pip(package_requirements=package_requirements,
                                  config=config,
@@ -902,7 +1243,9 @@ def extract_license_from_package(package_file: str, licenses_dir: str) -> None:
                             licenses_dir) / f"{base_name}_LICENSE.txt"
                         with open(output_file, 'wb') as f:
                             f.write(license_content)
-                        logger.info("ライセンスファイルを抽出: %s", output_file)
+                        logger.info(
+                            _("log_extracted_license_file",
+                              file=output_file))
                         license_found = True
                         break
 
@@ -922,15 +1265,22 @@ def extract_license_from_package(package_file: str, licenses_dir: str) -> None:
                                 licenses_dir) / f"{base_name}_LICENSE.txt"
                             with open(output_file, 'wb') as f:
                                 f.write(license_content)
-                            logger.info("ライセンスファイルを抽出: %s", output_file)
+                            logger.info(
+                                _("log_extracted_license_file",
+                                  file=output_file))
                             license_found = True
                             break
 
         if not license_found:
-            logger.warning("ライセンスファイルが見つかりません: %s", package_file)
+            logger.warning(
+                _("log_license_file_not_found_in_package",
+                  file=package_file))
 
     except (zipfile.BadZipFile, tarfile.TarError, OSError, IOError) as e:
-        logger.error("ライセンスファイルの抽出に失敗: %s - %s", package_file, e)
+        logger.error(
+            _("log_extract_license_file_failed",
+              file=package_file,
+              error=e))
 
 
 def extract_licenses_from_directory(packages_dir: str) -> None:
@@ -945,18 +1295,21 @@ def extract_licenses_from_directory(packages_dir: str) -> None:
     licenses_dir = packages_path / "LICENSES"
     licenses_dir.mkdir(exist_ok=True)
 
-    logger.info("ライセンスディレクトリを作成: %s", licenses_dir)
+    logger.info(
+        _("log_created_license_directory", directory=licenses_dir))
 
     # .whlと.tar.gzファイルを検索
     package_files = list(packages_path.glob("*.whl")) + list(
         packages_path.glob("*.tar.gz")) + list(packages_path.glob("*.tgz"))
 
-    logger.info("%s個のパッケージファイルからライセンスを抽出します", len(package_files))
+    logger.info(
+        _("log_extracting_licenses_from_package_files",
+          count=len(package_files)))
 
     for package_file in package_files:
         extract_license_from_package(str(package_file), str(licenses_dir))
 
-    logger.info("ライセンスの抽出が完了しました")
+    logger.info(_("log_license_extraction_completed"))
 
 
 def start_download(config: DownloadConfig, stop_event=None) -> None:

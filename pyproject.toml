@@ -1,38 +1,67 @@
-﻿[project]
+[project]
 name = "python-package-downloader"
-version = "1.1.1"
+version = "1.2.0"
 description = "A tool to download Python packages for offline installation"
 authors = [
-    {name = "fangface"}
+    { name = "fangface" }
 ]
 readme = "README.md"
-license = {text = "MIT"}
-requires-python = ">=3.8"
+license = { text = "MIT" }
+requires-python = ">=3.14"
 dependencies = [
     "requests",
     "pypi-simple",
     "cryptography",
     "packaging",
+    "tomli",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
+build = [
+    "nuitka>=4.1.3",
+]
 dev = [
     "pytest",
     "black",
     "flake8",
 ]
 
-[build-system]
-requires = ["setuptools>=45", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [tool.black]
 line-length = 88
-target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+target-version = ["py38", "py39", "py310", "py311", "py312", "py313", "py314"]
 
 [tool.isort]
 profile = "black"
 line_length = 88
 
+[tool.nuitka]
+# Basic options
+module-name = "PythonPackageDownloader"
+onefile = true
+follow-imports = true
 
+# Windows GUI application
+windows-console-mode = "disable"
+windows-icon-from-ico = "app_icon.ico"
+
+# Compiler options
+lto = "auto"
+
+# Output directory
+output-dir = "dist"
+
+# Include-data-files for resources
+# help, locales folders and config files will be included
+include-data-dirs = [
+    "help=help",
+    "locales=locales",
+]
+
+include-data-files = [
+    "config.json=config.json",
+    "loggingex_config.json=loggingex_config.json",
+    "pyproject.toml=pyproject.toml",
+    "Square44x44Logo.png=Square44x44Logo.png",
+    "Square150x150Logo.png=Square150x150Logo.png",
+]
 
