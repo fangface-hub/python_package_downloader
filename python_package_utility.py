@@ -1245,6 +1245,8 @@ def start_download(config: DownloadConfig, stop_event=None) -> None:
         ダウンロード設定.
     """
     config.history.clear()
+    config.failed.clear()
+    config.disabled_tools.clear()
     os.makedirs(config.dest_folder, exist_ok=True)
     package_requirements_list = []
     with open(config.package_list_file, "r", encoding="utf-8") as file:
