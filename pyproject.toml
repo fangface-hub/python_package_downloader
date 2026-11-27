@@ -12,8 +12,11 @@ dependencies = [
     "requests",
     "pypi-simple",
     "cryptography",
+    "keyring",
     "packaging",
     "tomli",
+    "tkinterex>=1.2.1",
+    "treeviewex>=1.2.2",
 ]
 
 [dependency-groups]
