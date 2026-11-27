@@ -116,6 +116,8 @@ class DownloadConfig:
     history: list = field(default_factory=list)
     # オプション非対応等で使えないと判明したツール(入れ子configと共有)
     disabled_tools: set = field(default_factory=set)
+    # 失敗した(要件, プラットフォーム, Python)の組(入れ子configと共有)
+    failed: set = field(default_factory=set)
 
 
 @dataclass
@@ -658,6 +660,10 @@ def _download_with_cli(package_requirements: PackageRequirements,
                 for python_version in config.python_versions:
                     if stop_event and stop_event.is_set():
                         return
+                    fail_key = (package_requirements.requirement, platform,
+                                python_version)
+                    if fail_key in config.failed:
+                        continue  # 同じ組み合わせは一度失敗したら再試行しない
                     if check_whl_version(
                             folder=config.dest_folder,
                             requirement=package_requirements,
@@ -685,7 +691,9 @@ def _download_with_cli(package_requirements: PackageRequirements,
                                              stop_event, tool)
                             return
                         # 該当wheelなし等は、この組み合わせだけ諦めて継続する。
+                        config.failed.add(fail_key)
                     except subprocess.TimeoutExpired:
+                        config.failed.add(fail_key)
                         logger.warning(
                             "Timeout: %s %s %s", package_requirements,
                             platform, python_version)
@@ -720,6 +728,9 @@ def _download_with_cli(package_requirements: PackageRequirements,
             _("log_source_distribution_already_downloaded",
               requirement=package_requirements))
         return
+    source_key = (package_requirements.requirement, "sdist", "")
+    if source_key in config.failed:
+        return
     # ソース形式は依存解決なしで取得し、ビルド依存関係解決の失敗ログを抑える。
     try:
         run_command(
@@ -732,7 +743,7 @@ def _download_with_cli(package_requirements: PackageRequirements,
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
             FileNotFoundError, OSError):
-        pass
+        config.failed.add(source_key)
     _collect_new_files(before_files, config, stop_event)
 
 

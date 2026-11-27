@@ -226,3 +226,21 @@ def test_cli_usage_error_disables_tool_and_falls_back(tmp_path, monkeypatch):
     assert len(calls) == 1  # 2回目以降はpipを実行しない
     assert len(fallback) == 2
     assert "pip" in cfg.disabled_tools
+
+
+def test_failed_combination_is_not_retried_across_nested_configs(
+        tmp_path, monkeypatch):
+    import subprocess
+    from dataclasses import replace
+    calls = []
+
+    def run(cmd, **kw):
+        calls.append(cmd)
+        raise subprocess.CalledProcessError(1, cmd)
+
+    cfg = _cli_setup(monkeypatch, tmp_path, run)
+    req = u.PackageRequirements("foo", ">=1")
+    u.download_package_pip(req, cfg)
+    nested = replace(cfg, dependency_level=1)  # 依存関係用のconfig
+    u.download_package_pip(req, nested)
+    assert len(calls) == 4
