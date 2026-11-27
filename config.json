@@ -24,8 +24,12 @@
         "3.15": "(any|none|py3|cp315)"
     },
     "os_to_platforms": {
-        "Windows(win_amd64)": ["win_amd64"],
-        "Windows(win_arm64)": ["win_arm64"],
+        "Windows(win_amd64)": [
+            "win_amd64"
+        ],
+        "Windows(win_arm64)": [
+            "win_arm64"
+        ],
         "Linux(linux_x86_64,manylinux2010_x86_64,manylinux2014_x86_64)": [
             "linux_x86_64",
             "manylinux2014_x86_64",
@@ -44,6 +48,34 @@
             "linux_aarch64",
             "manylinux2010_aarch64"
         ],
-        "macOS": ["macosx_10_9_x86_64"]
+        "macOS": [
+            "macosx_10_9_x86_64"
+        ],
+        "Linux(manylinux_2_17,2_28,2_34 x86_64)": [
+            "manylinux_2_28_x86_64",
+            "manylinux_2_34_x86_64",
+            "manylinux_2_17_x86_64"
+        ],
+        "Linux(manylinux_2_17,2_28,2_34 aarch64)": [
+            "manylinux_2_28_aarch64",
+            "manylinux_2_34_aarch64",
+            "manylinux_2_17_aarch64"
+        ],
+        "Linux(musllinux_1_2 x86_64)": [
+            "musllinux_1_2_x86_64",
+            "musllinux_1_1_x86_64"
+        ],
+        "Linux(musllinux_1_2 aarch64)": [
+            "musllinux_1_2_aarch64",
+            "musllinux_1_1_aarch64"
+        ],
+        "macOS(arm64,universal2)": [
+            "macosx_11_0_arm64",
+            "macosx_11_0_universal2",
+            "macosx_10_9_universal2"
+        ],
+        "Windows(win32)": [
+            "win32"
+        ]
     }
 }

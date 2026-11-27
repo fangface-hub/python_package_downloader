@@ -169,3 +169,18 @@ def test_dependencies_are_filtered_by_config_history(tmp_path):
     assert [d.package_name for d in deps] == ["bar"]
     assert history == [u.PackageRequirements("baz", "")]
     assert u.DownloadConfig().history is not u.DownloadConfig().history
+
+
+@pytest.mark.parametrize("name,ver,ok", [
+    ("a-1-py3-none-any.whl", "3.11", True),
+    ("a-1-cp311-cp311-win_amd64.whl", "3.11", True),
+    ("a-1-cp37-abi3-win_amd64.whl", "3.11", True),
+    ("a-1-cp312-abi3-win_amd64.whl", "3.11", False),
+    ("a-1-cp312-cp312-win_amd64.whl", "3.11", False),
+    ("a-1-cp313-cp313t-win_amd64.whl", "3.13", False),
+    ("a-1-py310-none-any.whl", "3.9", False),
+    ("a-1-py2.py3-none-any.whl", "3.11", True),
+])
+def test_is_python_compatible(name, ver, ok):
+    info = u.get_package_info_from_whl(name)
+    assert u.is_python_compatible(info, ver) is ok

@@ -285,6 +285,34 @@ def find_targz_package_info_list(folder: str,
     return package_info_list
 
 
+def is_python_compatible(info: PackageInfo, python_version: str) -> bool:
+    """wheelのPythonタグが対象バージョンで使えるか判定する(abi3対応).
+
+    例: 3.11に対し py3 / py311 / cp311 / cp37-abi3 は使え、cp312 は使えない。
+    """
+    try:
+        minor = int(python_version.split(".")[1])
+    except (IndexError, ValueError):
+        return False
+    for tag in info.python_version.split("."):
+        match = re.fullmatch(r"(py|cp)3(\d*)", tag)
+        if not match:
+            continue
+        kind, tag_minor = match.groups()
+        if not tag_minor:
+            if kind == "py":  # py3
+                return True
+            continue
+        tag_minor = int(tag_minor)
+        if tag_minor == minor and (kind == "py" or "t" not in info.abi):
+            return True
+        if kind == "cp" and info.abi == "abi3" and tag_minor <= minor:
+            return True
+        if kind == "py" and tag_minor <= minor:
+            return True
+    return info.python_version in ("any", "none")
+
+
 def version_satisfies(version: str, condition: str) -> bool:
     """バージョンがPEP 440の条件を満たすか判定する(条件なしはTrue)."""
     if not condition:
@@ -323,14 +351,11 @@ def check_whl_version(
     package_info_list = find_whl_package_info_list(folder,
                                                    requirement.package_name)
 
-    python_version_pattern = PYTHON_VERSION_TO_PATTERN.get(
-        python_version, "none")
-
     for package_info in package_info_list:
         if (package_info.platform != "any"
                 and platform not in package_info.platform):
             continue
-        if not re.search(python_version_pattern, package_info.python_version):
+        if not is_python_compatible(package_info, python_version):
             continue
         if version_satisfies(package_info.version,
                              requirement.version_condition):
@@ -861,7 +886,6 @@ def _select_latest_package(packages, requirement: PackageRequirements,
                            python_version: str | None = None):
     """条件に合う最新のwheel(platform指定なしの場合はsdist)を返す."""
     best, best_version = None, None
-    pattern = PYTHON_VERSION_TO_PATTERN.get(python_version, "none")
     for package in packages:
         if getattr(package, "is_yanked", False):
             continue
@@ -875,7 +899,7 @@ def _select_latest_package(packages, requirement: PackageRequirements,
             info = get_package_info_from_whl(package.filename)
             if info.platform != "any" and platform not in info.platform:
                 continue
-            if not re.search(pattern, info.python_version):
+            if not is_python_compatible(info, python_version):
                 continue
         if not version_satisfies(info.version, requirement.version_condition):
             continue
