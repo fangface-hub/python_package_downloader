@@ -71,6 +71,7 @@ if ($MyInvocation.InvocationName -ne '.') {
     $nuitkaOptions = @(
         '--onefile',
         '--enable-plugin=tk-inter',
+        '--include-package=keyring.backends',
         '--windows-console-mode=attach',
         '--windows-icon-from-ico=app_icon.ico',
         '--clang',

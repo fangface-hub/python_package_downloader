@@ -6,6 +6,8 @@ import sys
 import tkinter.messagebox as messagebox
 from pathlib import Path
 
+from i18n import _
+
 
 def run_with_progress(target_func, args=(), kwargs=None):
     """
@@ -39,6 +41,8 @@ def monitor_download_process(
     Queueから進捗情報を取得し、UIに反映する汎用関数。Tkinterのafterで繰り返し呼び出すことを想定。
     main_window.pyの_monitor_download_processのロジックを移管。
     """
+    # 終了済みかを先に判定し、終了直前に送られたメッセージも取りこぼさない
+    alive = download_process.is_alive()
     try:
         while not progress_queue.empty():
             progress = progress_queue.get_nowait()
@@ -55,6 +59,7 @@ def monitor_download_process(
                     status_label.config(text=download_cancelled_msg)
                 elif progress["status"] == "error":
                     error_msg_val = progress.get("message", error_msg)
+                    download_process.error_message = error_msg_val
                     main_progress_text_ref[0] = ""
                     dependency_progress_text_ref[0] = ""
                     dependency_progress_stack_ref.clear()
@@ -90,7 +95,7 @@ def monitor_download_process(
                 update_status_label_func()
     except (EOFError, OSError, queue.Empty):
         pass
-    if download_process.is_alive():
+    if alive:
         # 100ms後に再度チェック（Tkinterのafterで呼び出し元で設定）
         status_label.after(
             100, lambda: monitor_download_process(
@@ -105,11 +110,17 @@ def monitor_download_process(
         download_process.join()
         download_button.config(state="normal")
         cancel_button.config(state="disabled")
+        if stop_event.is_set():
+            return
         exit_code = getattr(download_process, "exitcode", 0)
         if exit_code == 0:
             messagebox.showinfo(complete_msg, download_complete_msg)
-        elif not stop_event.is_set():
-            messagebox.showerror(error_msg, error_msg)
+        else:
+            detail = getattr(download_process, "error_message", exit_code)
+            messagebox.showerror(
+                error_msg,
+                error_occurred_msg.format(
+                    error_msg=(str(detail).splitlines() or [""])[0]))
 
 
 def open_file_with_platform(filepath: str) -> None:
@@ -128,4 +139,4 @@ def open_file_with_platform(filepath: str) -> None:
         else:
             subprocess.run(["xdg-open", str(path)], check=False)
     except Exception as e:
-        raise RuntimeError(f"ファイルのオープンに失敗: {e}") from e
+        raise RuntimeError(_("error_open_file_failed", error=e)) from e

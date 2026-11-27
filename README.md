@@ -15,8 +15,6 @@ python_package_downloader
 ├── loggingex.py                   # ログ設定ユーティリティ
 ├── signalex.py                    # サブプロセス実行/シグナル制御
 ├── subprocessex.py                # ダウンロード監視・補助関数
-├── tkinterex.py                   # カスタムTkinterウィジェット
-├── treeviewex.py                  # TreeView拡張
 ├── config.json                    # Pythonバージョン/OSマッピング設定
 ├── loggingex_config.json          # ログ出力設定
 ├── pyproject.toml                 # プロジェクト設定

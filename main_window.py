@@ -52,7 +52,7 @@ from python_package_utility import (
     save_settings,
     start_download,
 )
-from tkinterex import CustomCheckbutton, CustomEntry, CustomListbox
+from tkinterex import CheckbuttonEx, EntryEx, ListboxEx
 
 _stdout_subscribers = []
 _stdout_state = {"installed": False}
@@ -279,7 +279,7 @@ def _run_download_process(config, progress_queue, stop_event):
             "status": "error",
             "message": f"{e}\n{traceback.format_exc()}"
         })
-        return
+        sys.exit(1)
 
 
 class MainWindow(Tk):
@@ -487,7 +487,7 @@ class MainWindow(Tk):
                                                      pady=5,
                                                      anchor="w")
         self.os_options = list(OS_TO_PLATFORMS.keys())
-        self.os_options_listbox = CustomListbox(
+        self.os_options_listbox = ListboxEx(
             os_frame,
             selectmode="multiple",
             exportselection=False,
@@ -508,7 +508,7 @@ class MainWindow(Tk):
                                                                    pady=5,
                                                                    anchor="w")
         self.python_versions = list(PYTHON_VERSION_TO_ABI.keys())
-        self.python_version_listbox = CustomListbox(
+        self.python_version_listbox = ListboxEx(
             python_version_frame,
             selectmode="multiple",
             exportselection=False,
@@ -561,7 +561,7 @@ class MainWindow(Tk):
                                                    padx=10,
                                                    pady=5,
                                                    anchor="w")
-        self.dest_folder_entry = CustomEntry(dest_folder_frame)
+        self.dest_folder_entry = EntryEx(dest_folder_frame)
         self.dest_folder_entry.pack(side="left",
                                     padx=10,
                                     pady=5,
@@ -583,7 +583,7 @@ class MainWindow(Tk):
                                                        padx=10,
                                                        pady=5,
                                                        anchor="w")
-        self.pip_path_entry = CustomEntry(pip_path_frame)
+        self.pip_path_entry = EntryEx(pip_path_frame)
         self.pip_path_entry.value = self.get_default_pip_path()
         self.pip_path_entry.pack(side="left",
                                  padx=10,
@@ -602,7 +602,7 @@ class MainWindow(Tk):
         # プロキシ設定
         proxy_setting_frame = Frame(self)
         proxy_setting_frame.pack(side="top", fill="x", padx=2, pady=2)
-        self.use_proxy_checkbox = CustomCheckbutton(
+        self.use_proxy_checkbox = CheckbuttonEx(
             proxy_setting_frame,
             text=_("use_proxy"),
             command=self.toggle_proxy_widgets)
@@ -615,7 +615,7 @@ class MainWindow(Tk):
                                                                padx=10,
                                                                pady=2,
                                                                anchor="w")
-        self.proxy_user_entry = CustomEntry(
+        self.proxy_user_entry = EntryEx(
             proxy_user_frame,
             state="disabled",
         )
@@ -630,7 +630,7 @@ class MainWindow(Tk):
                                                                    padx=10,
                                                                    pady=2,
                                                                    anchor="w")
-        self.proxy_password_entry = CustomEntry(
+        self.proxy_password_entry = EntryEx(
             proxy_password_frame,
             state="disabled",
             show="*",
@@ -646,7 +646,7 @@ class MainWindow(Tk):
                                                                padx=10,
                                                                pady=2,
                                                                anchor="w")
-        self.proxy_server_entry = CustomEntry(
+        self.proxy_server_entry = EntryEx(
             proxy_server_frame,
             state="disabled",
         )
@@ -661,7 +661,7 @@ class MainWindow(Tk):
                                                            padx=10,
                                                            pady=2,
                                                            anchor="w")
-        self.proxy_port_entry = CustomEntry(proxy_port_frame,
+        self.proxy_port_entry = EntryEx(proxy_port_frame,
                                             state="disabled",
                                             validate="key")
         self.proxy_port_entry.pack(side="left",
@@ -682,7 +682,7 @@ class MainWindow(Tk):
                                                                   padx=10,
                                                                   pady=5,
                                                                   anchor="w")
-        self.include_source_check = CustomCheckbutton(source_format_frame)
+        self.include_source_check = CheckbuttonEx(source_format_frame)
         self.include_source_check.pack(side="left", padx=10, pady=5, anchor="w")
         self.include_source_check.value = False
         include_deps_frame = Frame(self)
@@ -692,7 +692,7 @@ class MainWindow(Tk):
                                                    padx=10,
                                                    pady=5,
                                                    anchor="w")
-        self.include_deps_check = CustomCheckbutton(include_deps_frame)
+        self.include_deps_check = CheckbuttonEx(include_deps_frame)
         self.include_deps_check.pack(side="left", padx=10, pady=5, anchor="w")
         self.include_deps_check.value = False
         # ダウンロード開始ボタン
@@ -873,8 +873,9 @@ class MainWindow(Tk):
                 proxy = "http://"
                 if proxy_user and proxy_password:
                     # パスワードをURLエンコード
-                    encoded_password = urllib.parse.quote(proxy_password)
-                    proxy += f"{proxy_user}:{encoded_password}@"
+                    encoded_password = urllib.parse.quote(proxy_password, safe="")
+                    encoded_user = urllib.parse.quote(proxy_user, safe="")
+                    proxy += f"{encoded_user}:{encoded_password}@"
                 proxy += f"{proxy_server}:{proxy_port}"
 
         # 環境変数にプロキシを設定
