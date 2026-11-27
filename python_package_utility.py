@@ -114,6 +114,8 @@ class DownloadConfig:
     dependency_level: int = 0  # 依存関係の階層レベル（0=メインパッケージ）
     # ダウンロード済み要件の履歴(依存関係の入れ子config間で共有される)
     history: list = field(default_factory=list)
+    # オプション非対応等で使えないと判明したツール(入れ子configと共有)
+    disabled_tools: set = field(default_factory=set)
 
 
 @dataclass
@@ -593,6 +595,21 @@ def _collect_new_files(before_files: set[str], config: DownloadConfig,
     return True
 
 
+def _fallback_no_pip(package_requirements: PackageRequirements,
+                     config: DownloadConfig, stop_event, tool: str) -> None:
+    """ツールが使えない場合に、uvならpip、それも不可ならpypi-simpleで取得する."""
+    if tool == "uv" and "pip" not in config.disabled_tools:
+        download_package_pip(package_requirements, config, stop_event)
+        return
+    if not PYPISIMPLE_AVAILABLE:
+        return
+    logger.warning(
+        _("log_tool_unavailable_fallback",
+          tool=tool,
+          requirement=package_requirements))
+    download_package_no_pip(package_requirements, config, stop_event)
+
+
 def _download_with_cli(package_requirements: PackageRequirements,
                        config: DownloadConfig, stop_event, tool: str) -> None:
     """pipまたはuv(pip互換)でパッケージをダウンロードする.
@@ -600,6 +617,10 @@ def _download_with_cli(package_requirements: PackageRequirements,
     tool には "pip" または "uv" を指定する.
     """
     if stop_event and stop_event.is_set():
+        return
+
+    if tool in config.disabled_tools:
+        _fallback_no_pip(package_requirements, config, stop_event, tool)
         return
 
     before_files = set(os.listdir(config.dest_folder))
@@ -619,7 +640,8 @@ def _download_with_cli(package_requirements: PackageRequirements,
             logger.warning(
                 _("log_uv_pip_download_unsupported",
                   requirement=package_requirements))
-            download_package_pip(package_requirements, config, stop_event)
+            config.disabled_tools.add(tool)  # 以降は再判定しない
+            _fallback_no_pip(package_requirements, config, stop_event, tool)
             return
 
         base_command = prefix + subcommand + [package_requirements.requirement]
@@ -643,15 +665,30 @@ def _download_with_cli(package_requirements: PackageRequirements,
                             python_version=python_version,
                     ):
                         continue
-                    run_command(
-                        base_command + [
-                            "--only-binary=:all:",
-                            f"--platform={platform}",
-                            f"--python-version={python_version.replace('.', '')}",
-                            f"--dest={config.dest_folder}",
-                        ],
-                        stderr_as_error=not config.include_source,
-                    )
+                    try:
+                        run_command(
+                            base_command + [
+                                "--only-binary=:all:",
+                                f"--platform={platform}",
+                                "--python-version="
+                                f"{python_version.replace('.', '')}",
+                                f"--dest={config.dest_folder}",
+                            ],
+                            stderr_as_error=not config.include_source,
+                        )
+                    except subprocess.CalledProcessError as e:
+                        # 終了コード2はオプション非対応(使用法エラー)。
+                        # 以降このツールは使わず、別方式に切り替える。
+                        if e.returncode == 2:
+                            config.disabled_tools.add(tool)
+                            _fallback_no_pip(package_requirements, config,
+                                             stop_event, tool)
+                            return
+                        # 該当wheelなし等は、この組み合わせだけ諦めて継続する。
+                    except subprocess.TimeoutExpired:
+                        logger.warning(
+                            "Timeout: %s %s %s", package_requirements,
+                            platform, python_version)
         if _collect_new_files(before_files, config, stop_event):
             return
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
@@ -662,13 +699,8 @@ def _download_with_cli(package_requirements: PackageRequirements,
                 _("log_download_error",
                   requirement=package_requirements,
                   error=e))
-            if PYPISIMPLE_AVAILABLE:
-                logger.warning(
-                    _("log_tool_unavailable_fallback",
-                      tool=tool,
-                      requirement=package_requirements))
-                download_package_no_pip(package_requirements, config,
-                                        stop_event)
+            config.disabled_tools.add(tool)  # 以降は再判定しない
+            _fallback_no_pip(package_requirements, config, stop_event, tool)
             return
         if not config.include_source:
             logger.error(

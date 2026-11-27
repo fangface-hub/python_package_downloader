@@ -184,3 +184,45 @@ def test_dependencies_are_filtered_by_config_history(tmp_path):
 def test_is_python_compatible(name, ver, ok):
     info = u.get_package_info_from_whl(name)
     assert u.is_python_compatible(info, ver) is ok
+
+
+def _cli_setup(monkeypatch, tmp_path, run):
+    monkeypatch.setattr(u, "run_command", run)
+    monkeypatch.setattr(u, "_resolve_pip_command_prefix", lambda p: ["pip"])
+    monkeypatch.setattr(u, "OS_TO_PLATFORMS", {"X": ["p1", "p2"]})
+    return u.DownloadConfig(os_list=["X"], python_versions=["3.11", "3.12"],
+                            dest_folder=str(tmp_path))
+
+
+def test_cli_failure_continues_with_other_combinations(tmp_path, monkeypatch):
+    import subprocess
+    calls = []
+
+    def run(cmd, **kw):
+        calls.append(cmd)
+        raise subprocess.CalledProcessError(1, cmd)
+
+    cfg = _cli_setup(monkeypatch, tmp_path, run)
+    u.download_package_pip(u.PackageRequirements("foo", ""), cfg)
+    assert len(calls) == 4
+    assert not cfg.disabled_tools
+
+
+def test_cli_usage_error_disables_tool_and_falls_back(tmp_path, monkeypatch):
+    import subprocess
+    calls, fallback = [], []
+
+    def run(cmd, **kw):
+        calls.append(cmd)
+        raise subprocess.CalledProcessError(2, cmd)
+
+    cfg = _cli_setup(monkeypatch, tmp_path, run)
+    monkeypatch.setattr(u, "PYPISIMPLE_AVAILABLE", True)
+    monkeypatch.setattr(u, "download_package_no_pip",
+                        lambda *a, **k: fallback.append(a))
+    req = u.PackageRequirements("foo", "")
+    u.download_package_pip(req, cfg)
+    u.download_package_pip(req, cfg)
+    assert len(calls) == 1  # 2回目以降はpipを実行しない
+    assert len(fallback) == 2
+    assert "pip" in cfg.disabled_tools
